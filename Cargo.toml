@@ -9,7 +9,6 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-ndarray = "0.16.1"
 wasm-bindgen = "0.2"
 
 [dependencies.web-sys]

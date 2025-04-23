@@ -7,6 +7,7 @@ use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
+mod matrix;
 mod rendering;
 mod shapes;
 mod vectors;

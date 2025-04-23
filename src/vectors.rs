@@ -25,13 +25,14 @@ impl Vector<3> {
         ])
     }
 
-    pub fn homogenous(&self) -> [[f64; 1]; 4] {
+    pub fn homogenous(&self) -> Vector<4> {
         [
-            [self.0[0]],
-            [self.0[1]],
-            [if self.0[2] == 0.0 { 0.0001 } else { self.0[2] }],
-            [1.0],
+            self.0[0],
+            self.0[1],
+            if self.0[2] == 0.0 { 0.0001 } else { self.0[2] },
+            1.0,
         ]
+        .into()
     }
 }
 

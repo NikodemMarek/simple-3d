@@ -1,7 +1,6 @@
-use ndarray::arr2;
 use web_sys::CanvasRenderingContext2d;
 
-use crate::{Camera, shapes::Triangle, vectors::Vector};
+use crate::{Camera, matrix::Matrix, shapes::Triangle, vectors::Vector};
 
 pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
     let (width, height) = camera.screen_size;
@@ -148,7 +147,7 @@ fn projection_matrix(
         far,
         ..
     }: &Camera,
-) -> [[f64; 4]; 4] {
+) -> Matrix<4, 4> {
     let f = 1.0 / f64::tan(fov / 2.0);
     [
         [f / aspect_ratio, 0.0, 0.0, 0.0],
@@ -161,6 +160,7 @@ fn projection_matrix(
         ],
         [0.0, 0.0, -1.0, 0.0],
     ]
+    .into()
 }
 
 fn view_matrix(
@@ -170,7 +170,7 @@ fn view_matrix(
         up,
         ..
     }: &Camera,
-) -> [[f64; 4]; 4] {
+) -> Matrix<4, 4> {
     let f = (*target - *position).normalize();
     let r = f.cross(*up).normalize();
     let u = r.cross(f);
@@ -180,6 +180,7 @@ fn view_matrix(
         [-f[0], -f[1], -f[2], -f.dot(*position)],
         [0.0, 0.0, 0.0, 1.0],
     ]
+    .into()
 }
 
 fn project_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
@@ -198,20 +199,15 @@ fn pipeline(camera: &Camera, point: Vector<3>) -> Vector<3> {
 }
 
 fn projection_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
-    let projection = arr2(&projection_matrix(camera));
-    let v = projection.dot(&arr2(&point.homogenous()));
-    (
-        v[[0, 0]] / v[[3, 0]],
-        v[[1, 0]] / v[[3, 0]],
-        v[[2, 0]] / v[[3, 0]],
-    )
-        .into()
+    let projection = projection_matrix(camera);
+    let v = projection.dot(&point.homogenous());
+    (v[0] / v[3], v[1] / v[3], v[2] / v[3]).into()
 }
 
 fn camera_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
-    let view = arr2(&view_matrix(camera));
-    let v = view.dot(&arr2(&point.homogenous()));
-    (v[[0, 0]], v[[1, 0]], v[[2, 0]]).into()
+    let view = view_matrix(camera);
+    let v = view.dot(&point.homogenous());
+    (v[0], v[1], v[2]).into()
 }
 
 fn viewport_transformation(camera: &Camera, vec: Vector<3>) -> Vector<3> {

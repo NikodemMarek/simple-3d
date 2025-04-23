@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use web_sys::Event;
 use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -22,14 +23,27 @@ fn document() -> web_sys::Document {
         .expect("should have a document on window")
 }
 
+fn canvas() -> HtmlCanvasElement {
+    document()
+        .get_element_by_id("canvas")
+        .unwrap()
+        .dyn_into::<HtmlCanvasElement>()
+        .unwrap()
+}
+
+fn context() -> CanvasRenderingContext2d {
+    canvas()
+        .get_context("2d")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<CanvasRenderingContext2d>()
+        .unwrap()
+}
+
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    let (canvas, context) = get_canvas_and_context();
-    let canvas = Rc::new(canvas);
-    let context = Rc::new(context);
-
-    let width = canvas.client_width() as f64;
-    let height = canvas.client_height() as f64;
+    let width = canvas().client_width() as f64;
+    let height = canvas().client_height() as f64;
     let camera = Camera {
         screen_size: (width, height),
         position: (0.0, 0.0, 3.0).into(),
@@ -42,39 +56,84 @@ pub fn start() -> Result<(), JsValue> {
     };
     let camera = Rc::new(RefCell::new(camera));
 
-    resize_canvas_to_display_size(&canvas, &camera);
+    resize_display(&camera);
+    {
+        let camera = Rc::clone(&camera);
+        register_event_listener("resize", move |_: Event| {
+            resize_display(&camera);
+        });
+    }
 
-    register_resize_listener(&canvas, &camera);
-    register_timer(50, &camera);
-    register_keypress_listener(&camera);
-    register_mouse_drag_listener(&camera);
+    {
+        let camera = Rc::clone(&camera);
+        register_timer(50, move || {
+            camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
+        });
+    }
 
-    start_animation_loop(context, &camera);
+    {
+        let camera = Rc::clone(&camera);
+        register_event_listener("keydown", move |event: KeyboardEvent| {
+            let key = event.key();
+            web_sys::console::log_1(&format!("Key pressed: {}", key).into());
+            match key.as_ref() {
+                "ArrowUp" => {
+                    camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
+                }
+                "ArrowDown" => {
+                    camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
+                }
+                "ArrowLeft" => {
+                    camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
+                }
+                "ArrowRight" => {
+                    camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
+                }
+                _ => {}
+            }
+        });
+    }
+
+    {
+        let is_held = Rc::new(Cell::new(false));
+        {
+            let is_held = Rc::clone(&is_held);
+            register_event_listener("mousedown", move |_: MouseEvent| {
+                is_held.set(true);
+            });
+        }
+        {
+            let is_held = Rc::clone(&is_held);
+            register_event_listener("mouseup", move |_: MouseEvent| {
+                is_held.set(false);
+            });
+        }
+
+        let camera = Rc::clone(&camera);
+        register_event_listener("mousemove", move |event: MouseEvent| {
+            if !is_held.get() {
+                return;
+            }
+
+            let x = event.client_x() as f64;
+            let y = event.client_y() as f64;
+
+            let (width, height) = camera.borrow().screen_size;
+            camera.borrow_mut().target +=
+                ((x - width / 2.0) / 100.0, (y - height / 2.0) / 100.0, -1.0).into();
+        });
+    }
+
+    start_animation_loop(&camera);
 
     Ok(())
 }
 
-fn get_canvas_and_context() -> (HtmlCanvasElement, CanvasRenderingContext2d) {
-    let canvas = document()
-        .get_element_by_id("canvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()
-        .unwrap();
-
-    let context = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()
-        .unwrap();
-
-    (canvas, context)
-}
-
-fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement, camera: &Rc<RefCell<Camera>>) {
+fn resize_display(camera: &Rc<RefCell<Camera>>) {
     let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
     let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
 
+    let canvas = canvas();
     canvas.set_width(width);
     canvas.set_height(height);
 
@@ -82,24 +141,8 @@ fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement, camera: &Rc<RefCell
     camera.borrow_mut().aspect_ratio = width as f64 / height as f64;
 }
 
-fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>, camera: &Rc<RefCell<Camera>>) {
-    let canvas = Rc::clone(canvas);
-    let camera = Rc::clone(camera);
-    let closure = Closure::wrap(Box::new(move || {
-        resize_canvas_to_display_size(&canvas, &camera);
-    }) as Box<dyn Fn()>);
-
-    window()
-        .add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
-        .unwrap();
-    closure.forget(); // Keep it alive
-}
-
-fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
-    let camera = Rc::clone(camera);
-    let closure = Closure::wrap(Box::new(move || {
-        camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
-    }) as Box<dyn FnMut()>);
+fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
+    let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
 
     window()
         .set_interval_with_callback_and_timeout_and_arguments_0(
@@ -110,72 +153,19 @@ fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
     closure.forget(); // Keep it alive
 }
 
-fn register_keypress_listener(camera: &Rc<RefCell<Camera>>) {
-    let camera = Rc::clone(camera);
-    let closure = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-        let key = event.key();
-        web_sys::console::log_1(&format!("Key pressed: {}", key).into());
-        match key.as_ref() {
-            "ArrowUp" => {
-                camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
-            }
-            "ArrowDown" => {
-                camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
-            }
-            "ArrowLeft" => {
-                camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
-            }
-            "ArrowRight" => {
-                camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
-            }
-            _ => {}
-        }
+fn register_event_listener<E, C>(event: &str, closure: C)
+where
+    E: JsCast + 'static,
+    C: Fn(E) + 'static,
+{
+    let closure = Closure::wrap(Box::new(move |e: web_sys::Event| {
+        closure(e.dyn_into::<E>().unwrap());
     }) as Box<dyn FnMut(_)>);
 
     window()
-        .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())
+        .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
         .unwrap();
     closure.forget(); // Keep it alive
-}
-
-fn register_mouse_drag_listener(camera: &Rc<RefCell<Camera>>) {
-    let camera = Rc::clone(camera);
-
-    let is_held = Rc::new(Cell::new(false));
-    let md_is_held = Rc::clone(&is_held);
-    let mousedown_closure = Closure::wrap(Box::new(move |_: MouseEvent| {
-        md_is_held.set(true);
-    }) as Box<dyn FnMut(_)>);
-    let mu_is_held = Rc::clone(&is_held);
-    let mouseup_closure = Closure::wrap(Box::new(move |_: MouseEvent| {
-        mu_is_held.set(false);
-    }) as Box<dyn FnMut(_)>);
-
-    let move_closure = Closure::wrap(Box::new(move |event: MouseEvent| {
-        if !is_held.get() {
-            return;
-        }
-
-        let x = event.client_x() as f64;
-        let y = event.client_y() as f64;
-
-        let (width, height) = camera.borrow().screen_size;
-        camera.borrow_mut().target +=
-            ((x - width / 2.0) / 100.0, (y - height / 2.0) / 100.0, -1.0).into();
-    }) as Box<dyn FnMut(_)>);
-
-    window()
-        .add_event_listener_with_callback("mousedown", mousedown_closure.as_ref().unchecked_ref())
-        .unwrap();
-    window()
-        .add_event_listener_with_callback("mouseup", mouseup_closure.as_ref().unchecked_ref())
-        .unwrap();
-    window()
-        .add_event_listener_with_callback("mousemove", move_closure.as_ref().unchecked_ref())
-        .unwrap();
-    mousedown_closure.forget(); // Keep it alive
-    mouseup_closure.forget(); // Keep it alive
-    move_closure.forget(); // Keep it alive
 }
 
 #[derive(Debug)]
@@ -199,9 +189,10 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestAnimationFrame` OK");
 }
 
-fn start_animation_loop(context: Rc<CanvasRenderingContext2d>, camera: &Rc<RefCell<Camera>>) {
+fn start_animation_loop(camera: &Rc<RefCell<Camera>>) {
     let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
     let g = Rc::clone(&f);
+    let context = context();
     let camera = Rc::clone(camera);
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {

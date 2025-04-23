@@ -1,6 +1,5 @@
 use crate::{
-    Camera, Pixel, Scene,
-    rasterizing::Screen,
+    Pixel, Scene,
     textures::Texture,
     types::{
         matrix::Matrix,
@@ -40,64 +39,8 @@ pub fn render(scene: &mut Scene) {
     }
 }
 
-fn projection_matrix(
-    Camera {
-        fov,
-        aspect_ratio,
-        near,
-        far,
-        ..
-    }: &Camera,
-) -> Matrix<4, 4> {
-    let f = 1.0 / f64::tan(fov / 2.0);
-    [
-        [f / aspect_ratio, 0.0, 0.0, 0.0],
-        [0.0, f, 0.0, 0.0],
-        [
-            0.0,
-            0.0,
-            (near + far) / (near - far),
-            (2.0 * near * far) / (near - far),
-        ],
-        [0.0, 0.0, -1.0, 0.0],
-    ]
-    .into()
-}
-
-fn view_matrix(
-    Camera {
-        position,
-        target,
-        up,
-        ..
-    }: &Camera,
-) -> Matrix<4, 4> {
-    let f = (*target - *position).normalize();
-    let r = up.cross(f).normalize();
-    let u = f.cross(r);
-    let p = *position;
-    [
-        [r[0], r[1], r[2], -r.dot(p)],
-        [u[0], u[1], u[2], -u.dot(p)],
-        [-f[0], -f[1], -f[2], f.dot(p)],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-    .into()
-}
-
-fn viewport_matrix(Screen { width, height, .. }: &Screen) -> Matrix<4, 4> {
-    [
-        [*width as f64 / 2.0, 0.0, 0.0, *width as f64 / 2.0],
-        [0.0, -(*height as f64) / 2.0, 0.0, *height as f64 / 2.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-    .into()
-}
-
 fn transformation_matrix(scene: &Scene, mesh: &Mesh) -> Matrix<4, 4> {
-    viewport_matrix(&scene.screen)
-        * projection_matrix(&scene.camera)
-        * view_matrix(&scene.camera)
+    scene.screen.transformation_matrix().clone()
+        * scene.camera.transformation_matrix().clone()
         * mesh.transformation_matrix().clone()
 }

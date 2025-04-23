@@ -1,35 +1,12 @@
-use crate::{Pixel, types::mesh::Triangle, vector::Vector};
-
-#[derive(Debug, Clone)]
-pub struct Screen {
-    pub width: u32,
-    pub height: u32,
-
-    pub buffer: Box<[Pixel]>,
-    depth: Box<[f32]>,
-}
-impl Screen {
-    pub fn new(width: u32, height: u32) -> Self {
-        let size = (width * height) as usize;
-        Self {
-            width,
-            height,
-            buffer: vec![Pixel::default(); size].into(),
-            depth: vec![f32::MAX; size].into(),
-        }
-    }
-
-    pub fn clear_buffer(&mut self) {
-        self.buffer.fill(Pixel::default());
-    }
-    pub fn clear_depth(&mut self) {
-        self.depth.fill(f32::MAX);
-    }
-}
+use crate::{
+    Pixel,
+    types::{mesh::Triangle, screen::Screen},
+    vector::Vector,
+};
 
 pub fn rasterize_triangle(screen: &mut Screen, triangle: &Triangle, pixel: Pixel) {
     for point in triangle_points(triangle) {
-        rasterize_point(screen, point, pixel);
+        screen.put_pixel(point, pixel);
     }
 }
 
@@ -81,25 +58,6 @@ pub fn triangle_points<'a>(
     }))
 }
 
-fn rasterize_point(
-    Screen {
-        width,
-        height,
-        buffer,
-        depth,
-    }: &mut Screen,
-    (x, y, z): (u32, u32, f32),
-    pixel: Pixel,
-) {
-    if x < *width && y < *height {
-        let index = (x + y * *width) as usize;
-        if z.is_finite() && z < depth[index] {
-            buffer[index] = pixel;
-            depth[index] = z;
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use test::Bencher;
@@ -110,7 +68,7 @@ mod test {
         types::{mesh::Triangle, vertex::Vertex},
     };
 
-    use super::{rasterize_point, rasterize_triangle};
+    use super::rasterize_triangle;
 
     #[bench]
     fn test_rasterize_triangle(b: &mut Bencher) {
@@ -126,26 +84,5 @@ mod test {
         b.iter(|| {
             rasterize_triangle(&mut screen, &triangle, pixel);
         });
-    }
-
-    #[test]
-    fn test_rasterize_point() {
-        let mut screen = Screen::new(10, 10);
-
-        let pixel = Pixel(255, 0, 0, 255);
-        rasterize_point(&mut screen, (5, 5, 0.5), pixel);
-        assert_eq!(screen.buffer[5 + 5 * 10], pixel);
-
-        rasterize_point(&mut screen, (5, 5, 0.6), Pixel(0, 255, 128, 255));
-        assert_eq!(screen.buffer[5 + 5 * 10], pixel);
-
-        let pixel = Pixel(64, 255, 0, 255);
-        rasterize_point(&mut screen, (5, 5, 0.4), pixel);
-        assert_eq!(screen.buffer[5 + 5 * 10], pixel);
-
-        let second_pixel = Pixel(64, 255, 0, 255);
-        rasterize_point(&mut screen, (4, 6, 0.3), second_pixel);
-        assert_eq!(screen.buffer[5 + 5 * 10], pixel);
-        assert_eq!(screen.buffer[4 + 6 * 10], second_pixel);
     }
 }

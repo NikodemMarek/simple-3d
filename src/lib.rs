@@ -1,13 +1,15 @@
 #![feature(test)]
 extern crate test;
 
-use rasterizing::Screen;
 use r#static::shapes;
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
-use types::mesh::Mesh;
+use types::camera::Camera;
+use types::camera::CameraProperties;
+use types::pixel::Pixel;
+use types::scene::Scene;
+use types::screen::Screen;
 use types::textures;
 use types::vector;
 use wasm_bindgen::JsCast;
@@ -21,6 +23,10 @@ mod rasterizing;
 mod rendering;
 mod r#static;
 mod types;
+
+const NEAR: f64 = 0.1;
+const FAR: f64 = 100.0;
+const FOV: f64 = std::f64::consts::FRAC_PI_4;
 
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -55,15 +61,10 @@ pub fn start() -> Result<(), JsValue> {
     let height = canvas().client_height() as u32;
 
     let screen = Screen::new(width, height);
-    let camera = Camera {
-        position: (0.0, 0.0, 5.0).into(),
-        target: (0.0, 0.0, 0.0).into(),
-        up: (0.0, 1.0, 0.0).into(),
-        fov: std::f64::consts::FRAC_PI_4,
-        aspect_ratio: width as f64 / height as f64,
-        near: 0.1,
-        far: 100.0,
-    };
+    let camera_properties = CameraProperties::new(FOV, width as f64 / height as f64, NEAR, FAR);
+    let mut camera = Camera::new(camera_properties);
+    camera.r#move((0.0, 0.0, 5.0));
+
     let textures = textures::init();
 
     let mut cube = shapes::cube();
@@ -99,16 +100,16 @@ pub fn start() -> Result<(), JsValue> {
             web_sys::console::log_1(&format!("Key pressed: {}", key).into());
             match key.as_ref() {
                 "ArrowUp" => {
-                    scene.borrow_mut().camera.position += (0.0, 0.1, 0.0).into();
+                    scene.borrow_mut().camera.r#move((0.0, 0.1, 0.0));
                 }
                 "ArrowDown" => {
-                    scene.borrow_mut().camera.position += (0.0, -0.1, 0.0).into();
+                    scene.borrow_mut().camera.r#move((0.0, -0.1, 0.0));
                 }
                 "ArrowLeft" => {
-                    scene.borrow_mut().camera.position += (-0.1, 0.0, 0.0).into();
+                    scene.borrow_mut().camera.r#move((-0.1, 0.0, 0.0));
                 }
                 "ArrowRight" => {
-                    scene.borrow_mut().camera.position += (0.1, 0.0, 0.0).into();
+                    scene.borrow_mut().camera.r#move((0.1, 0.0, 0.0));
                 }
                 _ => {}
             }
@@ -165,17 +166,14 @@ pub fn start() -> Result<(), JsValue> {
                 );
                 *elevation.borrow_mut() = elev;
 
-                let radius =
-                    (scene.borrow().camera.position - scene.borrow().camera.target).magnitude();
+                let radius = scene.borrow().camera.radius();
 
                 let az = *azimuth.borrow();
                 let x = radius * elev.cos() * az.sin();
                 let y = radius * elev.sin();
                 let z = radius * elev.cos() * az.cos();
 
-                let new_pos =
-                    Into::<vector::Vector<3>>::into((x, y, z)) + scene.borrow().camera.target;
-                scene.borrow_mut().camera.position = new_pos;
+                scene.borrow_mut().camera.r#move((x, y, z));
             });
         }
     }
@@ -195,7 +193,9 @@ fn resize_display(scene: &Rc<RefCell<Scene>>) {
 
     let mut scene = scene.borrow_mut();
     scene.screen = Screen::new(width, height);
-    scene.camera.aspect_ratio = width as f64 / height as f64;
+    let camera_properties = CameraProperties::new(FOV, width as f64 / height as f64, NEAR, FAR);
+    let camera = scene.camera.clone();
+    scene.camera = Camera::inherit(camera, camera_properties);
 }
 
 fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
@@ -223,27 +223,6 @@ where
         .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
         .unwrap();
     closure.forget(); // Keep it alive
-}
-
-#[derive(Debug)]
-struct Scene {
-    screen: Screen,
-    camera: Camera,
-    textures: HashMap<Box<str>, textures::Texture>,
-    objects: Vec<Mesh>,
-}
-
-#[derive(Debug)]
-struct Camera {
-    position: vector::Vector<3>,
-    target: vector::Vector<3>,
-    up: vector::Vector<3>,
-
-    fov: f64, // in radians
-    aspect_ratio: f64,
-
-    near: f64,
-    far: f64,
 }
 
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
@@ -276,34 +255,21 @@ fn render(scene: &mut Scene, context: &CanvasRenderingContext2d) {
     web_sys::console::log_1(&"Rendering frame".into());
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Pixel(pub u8, pub u8, pub u8, pub u8);
-impl Default for Pixel {
-    fn default() -> Self {
-        Pixel(255, 255, 255, 255)
-    }
-}
+fn draw(screen: &Screen, context: &CanvasRenderingContext2d) {
+    let (width, height) = screen.size();
+    context.clear_rect(0.0, 0.0, width as f64, height as f64);
 
-fn draw(
-    Screen {
-        width,
-        height,
-        buffer,
-        ..
-    }: &Screen,
-    context: &CanvasRenderingContext2d,
-) {
-    context.clear_rect(0.0, 0.0, *width as f64, *height as f64);
-
-    let image_data = mk_image_data(*width, *height, buffer);
+    let image_data = mk_image_data(screen);
     context.put_image_data(&image_data, 0.0, 0.0).unwrap();
 }
 
-fn mk_image_data(width: u32, height: u32, data: &[Pixel]) -> web_sys::ImageData {
-    let data = data
+fn mk_image_data(screen: &Screen) -> web_sys::ImageData {
+    let data = screen
+        .buffer()
         .iter()
         .flat_map(|Pixel(r, g, b, a)| vec![*r, *g, *b, *a])
         .collect::<Vec<_>>();
+    let (width, height) = screen.size();
     web_sys::ImageData::new_with_u8_clamped_array_and_sh(
         wasm_bindgen::Clamped(&data),
         width,

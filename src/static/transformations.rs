@@ -35,18 +35,6 @@ pub fn rotate<V: Into<Vector<3>>>(angles: V) -> Matrix<4, 4> {
     ]
     .into()
 }
-#[inline]
-pub fn rotate_x(angle: f64) -> Matrix<4, 4> {
-    rotate((angle, 0.0, 0.0))
-}
-#[inline]
-pub fn rotate_y(angle: f64) -> Matrix<4, 4> {
-    rotate((0.0, angle, 0.0))
-}
-#[inline]
-pub fn rotate_z(angle: f64) -> Matrix<4, 4> {
-    rotate((0.0, 0.0, angle))
-}
 
 pub fn translate<V: Into<Vector<3>>>(vector: V) -> Matrix<4, 4> {
     let [x, y, z] = *vector.into();
@@ -80,7 +68,7 @@ mod tests {
     #[test]
     fn test_rotate_x() {
         assert_relative_eq!(
-            rotate_x(PI),
+            rotate((PI, 0.0, 0.0)),
             [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, -1.0, 0.0, 0.0],
@@ -94,7 +82,7 @@ mod tests {
     #[test]
     fn test_rotate_y() {
         assert_relative_eq!(
-            rotate_y(PI),
+            rotate((0.0, PI, 0.0)),
             [
                 [-1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -108,7 +96,7 @@ mod tests {
     #[test]
     fn test_rotate_z() {
         assert_relative_eq!(
-            rotate_z(PI),
+            rotate((0.0, 0.0, PI)),
             [
                 [-1.0, 0.0, 0.0, 0.0],
                 [0.0, -1.0, 0.0, 0.0],

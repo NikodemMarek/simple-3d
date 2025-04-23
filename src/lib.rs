@@ -1,4 +1,4 @@
-use drawing::Screen;
+use rasterizing::Screen;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,8 +9,8 @@ use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
-mod drawing;
 mod matrix;
+mod rasterizing;
 mod rendering;
 mod shapes;
 mod vector;

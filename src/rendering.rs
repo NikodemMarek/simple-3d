@@ -1,4 +1,4 @@
-use crate::{Camera, Pixel, drawing::Screen, matrix::Matrix, shapes::Triangle, vector::Vector};
+use crate::{Camera, Pixel, matrix::Matrix, rasterizing::Screen, shapes::Triangle, vector::Vector};
 
 pub fn render(camera: &mut Camera) {
     let cube: [(Triangle<3>, &str); 12] = [
@@ -60,7 +60,7 @@ pub fn render(camera: &mut Camera) {
 
     let mut to_draw = cube
         .iter()
-        .map(|(triangle, color)| (project_triangle(camera, *triangle), color))
+        .map(|(triangle, color)| (transform_triangle(camera, *triangle), color))
         .collect::<Vec<_>>();
 
     to_draw.sort_by(|a, b| {
@@ -85,7 +85,7 @@ pub fn render(camera: &mut Camera) {
             (b[0], b[1]).into(),
             (c[0], c[1]).into(),
         );
-        crate::drawing::render_triangle(&mut camera.screen, triangle, pixel);
+        crate::rasterizing::render_triangle(&mut camera.screen, triangle, pixel);
     }
 }
 
@@ -143,10 +143,16 @@ fn viewport_matrix(Screen { width, height, .. }: &Screen) -> Matrix<4, 4> {
     .into()
 }
 
-fn project_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
-    let vp = viewport_matrix(&camera.screen) * projection_matrix(camera) * view_matrix(camera);
+fn transform_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
+    let transformation =
+        viewport_matrix(&camera.screen) * projection_matrix(camera) * view_matrix(camera);
 
-    (pipeline(&vp, a), pipeline(&vp, b), pipeline(&vp, c)).into()
+    (
+        pipeline(&transformation, a),
+        pipeline(&transformation, b),
+        pipeline(&transformation, c),
+    )
+        .into()
 }
 
 fn pipeline(vp: &Matrix<4, 4>, point: Vector<3>) -> Vector<3> {

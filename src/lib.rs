@@ -1,3 +1,4 @@
+use drawing::Screen;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -8,10 +9,11 @@ use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
+mod drawing;
 mod matrix;
 mod rendering;
 mod shapes;
-mod vectors;
+mod vector;
 
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -42,15 +44,19 @@ fn context() -> CanvasRenderingContext2d {
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    let width = canvas().client_width() as f64;
-    let height = canvas().client_height() as f64;
+    let width = canvas().client_width() as u32;
+    let height = canvas().client_height() as u32;
     let camera = Camera {
-        screen_size: (width, height),
+        screen: Screen {
+            width,
+            height,
+            buffer: mk_pixel_array(width, height).into(),
+        },
         position: (0.0, 0.0, 3.0).into(),
         target: (0.0, 0.0, -1.0).into(),
         up: (0.0, 1.0, 0.0).into(),
         fov: std::f64::consts::PI / 2.0,
-        aspect_ratio: width / height,
+        aspect_ratio: width as f64 / height as f64,
         near: 0.1,
         far: 100.0,
     };
@@ -151,7 +157,7 @@ pub fn start() -> Result<(), JsValue> {
                 let y = radius * elev.sin();
                 let z = radius * elev.cos() * az.cos();
 
-                let new_pos = Into::<vectors::Vector<3>>::into((x, y, z)) + camera.borrow().target;
+                let new_pos = Into::<vector::Vector<3>>::into((x, y, z)) + camera.borrow().target;
                 camera.borrow_mut().position = new_pos;
             });
         }
@@ -170,8 +176,13 @@ fn resize_display(camera: &Rc<RefCell<Camera>>) {
     canvas.set_width(width);
     canvas.set_height(height);
 
-    camera.borrow_mut().screen_size = (width as f64, height as f64);
-    camera.borrow_mut().aspect_ratio = width as f64 / height as f64;
+    let mut camera = camera.borrow_mut();
+    camera.screen = Screen {
+        width,
+        height,
+        buffer: mk_pixel_array(width, height).into(),
+    };
+    camera.aspect_ratio = width as f64 / height as f64;
 }
 
 fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
@@ -203,11 +214,11 @@ where
 
 #[derive(Debug)]
 struct Camera {
-    screen_size: (f64, f64),
+    screen: Screen,
 
-    position: vectors::Vector<3>,
-    target: vectors::Vector<3>,
-    up: vectors::Vector<3>,
+    position: vector::Vector<3>,
+    target: vector::Vector<3>,
+    up: vector::Vector<3>,
 
     fov: f64, // in radians
     aspect_ratio: f64,
@@ -229,10 +240,54 @@ fn start_animation_loop(camera: &Rc<RefCell<Camera>>) {
     let camera = Rc::clone(camera);
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        rendering::render(&context, &camera.borrow());
+        let mut camera = camera.borrow_mut();
+
+        rendering::render(&mut camera);
+        draw(&camera.screen, &context);
+        camera.screen.clear_buffer();
+
+        web_sys::console::log_1(&"Rendering frame".into());
 
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
 
     request_animation_frame(g.borrow().as_ref().unwrap());
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Pixel(pub u8, pub u8, pub u8, pub u8);
+impl Default for Pixel {
+    fn default() -> Self {
+        Pixel(255, 255, 255, 255)
+    }
+}
+
+fn draw(
+    Screen {
+        width,
+        height,
+        buffer,
+    }: &Screen,
+    context: &CanvasRenderingContext2d,
+) {
+    context.clear_rect(0.0, 0.0, *width as f64, *height as f64);
+
+    let image_data = mk_image_data(*width, *height, buffer);
+    context.put_image_data(&image_data, 0.0, 0.0).unwrap();
+}
+
+fn mk_pixel_array(width: u32, height: u32) -> Vec<Pixel> {
+    vec![Pixel::default(); (width * height) as usize]
+}
+fn mk_image_data(width: u32, height: u32, data: &[Pixel]) -> web_sys::ImageData {
+    let data = data
+        .iter()
+        .flat_map(|Pixel(r, g, b, a)| vec![*r, *g, *b, *a])
+        .collect::<Vec<_>>();
+    web_sys::ImageData::new_with_u8_clamped_array_and_sh(
+        wasm_bindgen::Clamped(&data),
+        width,
+        height,
+    )
+    .unwrap()
 }

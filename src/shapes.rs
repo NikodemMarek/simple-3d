@@ -1,4 +1,4 @@
-use crate::vectors::Vector;
+use crate::vector::Vector;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Triangle<const S: usize>(pub Vector<S>, pub Vector<S>, pub Vector<S>);

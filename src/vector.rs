@@ -115,6 +115,11 @@ impl<const S: usize> From<Vec<f64>> for Vector<S> {
         Self(vec.try_into().unwrap())
     }
 }
+impl From<(f64, f64)> for Vector<2> {
+    fn from((x, y): (f64, f64)) -> Self {
+        Self([x, y])
+    }
+}
 impl From<(f64, f64, f64)> for Vector<3> {
     fn from((x, y, z): (f64, f64, f64)) -> Self {
         Self([x, y, z])

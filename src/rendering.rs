@@ -1,11 +1,6 @@
-use web_sys::CanvasRenderingContext2d;
+use crate::{Camera, Pixel, drawing::Screen, matrix::Matrix, shapes::Triangle, vector::Vector};
 
-use crate::{Camera, matrix::Matrix, shapes::Triangle, vectors::Vector};
-
-pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
-    let (width, height) = camera.screen_size;
-    context.clear_rect(0.0, 0.0, width, height);
-
+pub fn render(camera: &mut Camera) {
     let cube: [(Triangle<3>, &str); 12] = [
         // Front face (z = -1.0)
         (
@@ -75,7 +70,22 @@ pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
     });
 
     for (triangle, color) in to_draw {
-        draw_triangle(context, triangle, color);
+        let pixel = match *color {
+            "red" => Pixel(255, 0, 0, 255),
+            "green" => Pixel(0, 255, 0, 255),
+            "blue" => Pixel(0, 0, 255, 255),
+            "yellow" => Pixel(255, 255, 0, 255),
+            "cyan" => Pixel(0, 255, 255, 255),
+            "pink" => Pixel(255, 192, 203, 255),
+            _ => Pixel(255, 255, 255, 255),
+        };
+        let Triangle(a, b, c) = triangle;
+        let triangle = Triangle(
+            (a[0], a[1]).into(),
+            (b[0], b[1]).into(),
+            (c[0], c[1]).into(),
+        );
+        crate::drawing::render_triangle(&mut camera.screen, triangle, pixel);
     }
 }
 
@@ -123,51 +133,23 @@ fn view_matrix(
     .into()
 }
 
+fn viewport_matrix(Screen { width, height, .. }: &Screen) -> Matrix<4, 4> {
+    [
+        [*width as f64 / 2.0, 0.0, 0.0, *width as f64 / 2.0],
+        [0.0, -(*height as f64) / 2.0, 0.0, *height as f64 / 2.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    .into()
+}
+
 fn project_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
-    (
-        pipeline(camera, a),
-        pipeline(camera, b),
-        pipeline(camera, c),
-    )
-        .into()
+    let vp = viewport_matrix(&camera.screen) * projection_matrix(camera) * view_matrix(camera);
+
+    (pipeline(&vp, a), pipeline(&vp, b), pipeline(&vp, c)).into()
 }
 
-fn pipeline(camera: &Camera, point: Vector<3>) -> Vector<3> {
-    viewport_transformation(
-        camera,
-        projection_transformation(camera, camera_transformation(camera, point)),
-    )
-}
-
-fn projection_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
-    let projection = projection_matrix(camera);
-    let v = projection.dot(&point.homogenous());
+fn pipeline(vp: &Matrix<4, 4>, point: Vector<3>) -> Vector<3> {
+    let v = vp.dot(&point.homogenous());
     (v[0] / v[3], v[1] / v[3], v[2] / v[3]).into()
-}
-
-fn camera_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
-    let view = view_matrix(camera);
-    let v = view.dot(&point.homogenous());
-    (v[0], v[1], v[2]).into()
-}
-
-fn viewport_transformation(camera: &Camera, vec: Vector<3>) -> Vector<3> {
-    let [x, y, z] = *vec;
-    let (width, height) = camera.screen_size;
-    ((x + 1.0) * width / 2.0, (1.0 - y) * height / 2.0, z).into()
-}
-
-fn draw_triangle(context: &CanvasRenderingContext2d, Triangle(a, b, c): Triangle<3>, color: &str) {
-    let [a_x, a_y, _] = *a;
-    let [b_x, b_y, _] = *b;
-    let [c_x, c_y, _] = *c;
-
-    context.set_fill_style_str(color);
-
-    context.begin_path();
-    context.move_to(a_x, a_y);
-    context.line_to(b_x, b_y);
-    context.line_to(c_x, c_y);
-    context.close_path();
-    context.fill();
 }

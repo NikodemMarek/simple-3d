@@ -1,4 +1,4 @@
-use crate::{Pixel, shapes::Triangle, vector::Vector};
+use crate::{Pixel, types::mesh::Triangle, vector::Vector};
 
 #[derive(Debug, Clone)]
 pub struct Screen {

@@ -1,9 +1,12 @@
 use rasterizing::Screen;
-use shapes::Mesh;
+use r#static::shapes;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use types::mesh::Mesh;
+use types::textures;
+use types::vector;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::Event;
@@ -11,13 +14,10 @@ use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
-mod matrix;
 mod rasterizing;
 mod rendering;
-mod shapes;
-mod textures;
-mod transformations;
-mod vector;
+mod r#static;
+mod types;
 
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -66,13 +66,7 @@ pub fn start() -> Result<(), JsValue> {
     let mut cube = shapes::cube();
     cube.texture = "cube".into();
 
-    let transformation = transformations::translation(&(0.0, 0.0, 2.0).into())
-        * transformations::rotation_x(std::f64::consts::FRAC_PI_4)
-        * transformations::scaling(&(0.2, 0.2, 0.2).into());
-    let mut cube2 = shapes::cube().transformed(&transformation);
-    cube2.texture = "cube".into();
-
-    let objects = Vec::from([cube, cube2]);
+    let objects = Vec::from([cube]);
     let scene = Rc::new(RefCell::new(Scene {
         screen,
         camera,
@@ -90,11 +84,8 @@ pub fn start() -> Result<(), JsValue> {
 
     {
         let scene = Rc::clone(&scene);
-        let transformation = transformations::rotation_y(0.1);
-        let transformation2 = transformations::rotation_x(0.1);
         register_timer(50, move || {
-            scene.borrow_mut().objects[0].transform(&transformation);
-            scene.borrow_mut().objects[1].transform(&transformation2);
+            scene.borrow_mut().objects[0].rotate((0.01, 0.02, 0.03));
         });
     }
 

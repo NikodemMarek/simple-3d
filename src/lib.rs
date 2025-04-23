@@ -2,8 +2,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::console::log_1;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+
+mod rendering;
+mod types2d;
+mod types3d;
 
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -18,15 +21,29 @@ fn document() -> web_sys::Document {
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
     let (canvas, context) = get_canvas_and_context();
-
     let canvas = Rc::new(canvas);
     let context = Rc::new(context);
 
-    resize_canvas_to_display_size(&canvas);
+    let width = canvas.client_width() as f64;
+    let height = canvas.client_height() as f64;
+    let camera = Camera {
+        screen_size: (width, height),
+        position: (0.0, 0.0, 1.0).into(),
+        target: (0.0, 0.0, -1.0).into(),
+        up: (0.0, 1.0, 0.0).into(),
+        fov: std::f64::consts::PI / 2.0,
+        aspect_ratio: width / height,
+        near: 0.1,
+        far: 100.0,
+    };
+    let camera = Rc::new(RefCell::new(camera));
 
-    register_resize_listener(&canvas);
+    resize_canvas_to_display_size(&canvas, &camera);
 
-    start_animation_loop(canvas, context);
+    register_resize_listener(&canvas, &camera);
+    register_timer(50, &camera);
+
+    start_animation_loop(context, &camera);
 
     Ok(())
 }
@@ -48,20 +65,21 @@ fn get_canvas_and_context() -> (HtmlCanvasElement, CanvasRenderingContext2d) {
     (canvas, context)
 }
 
-fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement) {
+fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement, camera: &Rc<RefCell<Camera>>) {
     let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
     let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
 
     canvas.set_width(width);
     canvas.set_height(height);
 
-    log_1(&format!("resized to {}x{}", width, height).into());
+    camera.borrow_mut().screen_size = (width as f64, height as f64);
 }
 
-fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>) {
+fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>, camera: &Rc<RefCell<Camera>>) {
     let canvas = Rc::clone(canvas);
+    let camera = Rc::clone(camera);
     let closure = Closure::wrap(Box::new(move || {
-        resize_canvas_to_display_size(&canvas);
+        resize_canvas_to_display_size(&canvas, &camera);
     }) as Box<dyn Fn()>);
 
     window()
@@ -70,37 +88,52 @@ fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>) {
     closure.forget(); // Keep it alive
 }
 
+fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
+    let camera = Rc::clone(camera);
+    let closure = Closure::wrap(Box::new(move || {
+        camera.borrow_mut().position.z -= 0.01;
+    }) as Box<dyn FnMut()>);
+
+    window()
+        .set_interval_with_callback_and_timeout_and_arguments_0(
+            closure.as_ref().unchecked_ref(),
+            interval,
+        )
+        .unwrap();
+    closure.forget(); // Keep it alive
+}
+
+#[derive(Debug)]
+struct Camera {
+    screen_size: (f64, f64),
+
+    position: types3d::Point3d,
+    target: types3d::Point3d,
+    up: types3d::Point3d,
+
+    fov: f64, // in radians
+    aspect_ratio: f64,
+
+    near: f64,
+    far: f64,
+}
+
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK");
 }
 
-fn start_animation_loop(canvas: Rc<HtmlCanvasElement>, context: Rc<CanvasRenderingContext2d>) {
+fn start_animation_loop(context: Rc<CanvasRenderingContext2d>, camera: &Rc<RefCell<Camera>>) {
     let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
     let g = Rc::clone(&f);
+    let camera = Rc::clone(camera);
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        draw_centered_rect(&canvas, &context);
+        rendering::render(&context, &camera.borrow());
 
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
 
     request_animation_frame(g.borrow().as_ref().unwrap());
-}
-
-fn draw_centered_rect(canvas: &HtmlCanvasElement, context: &CanvasRenderingContext2d) {
-    let width = canvas.width() as f64;
-    let height = canvas.height() as f64;
-
-    context.clear_rect(0.0, 0.0, width, height);
-
-    let rect_width = 100.0;
-    let rect_height = 100.0;
-
-    let x = (width - rect_width) / 2.0;
-    let y = (height - rect_height) / 2.0;
-
-    context.set_fill_style_str(&"red");
-    context.fill_rect(x, y, rect_width, rect_height);
 }

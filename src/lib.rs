@@ -47,15 +47,11 @@ pub fn start() -> Result<(), JsValue> {
     let width = canvas().client_width() as u32;
     let height = canvas().client_height() as u32;
     let camera = Camera {
-        screen: Screen {
-            width,
-            height,
-            buffer: mk_pixel_array(width, height).into(),
-        },
-        position: (0.0, 0.0, 3.0).into(),
-        target: (0.0, 0.0, -1.0).into(),
+        screen: Screen::new(width, height),
+        position: (0.0, 0.0, 5.0).into(),
+        target: (0.0, 0.0, 0.0).into(),
         up: (0.0, 1.0, 0.0).into(),
-        fov: std::f64::consts::PI / 2.0,
+        fov: std::f64::consts::FRAC_PI_4,
         aspect_ratio: width as f64 / height as f64,
         near: 0.1,
         far: 100.0,
@@ -73,7 +69,7 @@ pub fn start() -> Result<(), JsValue> {
     {
         let camera = Rc::clone(&camera);
         register_timer(50, move || {
-            camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
+            // camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
         });
     }
 
@@ -84,10 +80,10 @@ pub fn start() -> Result<(), JsValue> {
             web_sys::console::log_1(&format!("Key pressed: {}", key).into());
             match key.as_ref() {
                 "ArrowUp" => {
-                    camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
+                    camera.borrow_mut().position += (0.0, 0.1, 0.0).into();
                 }
                 "ArrowDown" => {
-                    camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
+                    camera.borrow_mut().position += (0.0, -0.1, 0.0).into();
                 }
                 "ArrowLeft" => {
                     camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
@@ -177,11 +173,7 @@ fn resize_display(camera: &Rc<RefCell<Camera>>) {
     canvas.set_height(height);
 
     let mut camera = camera.borrow_mut();
-    camera.screen = Screen {
-        width,
-        height,
-        buffer: mk_pixel_array(width, height).into(),
-    };
+    camera.screen = Screen::new(width, height);
     camera.aspect_ratio = width as f64 / height as f64;
 }
 
@@ -267,6 +259,7 @@ fn draw(
         width,
         height,
         buffer,
+        ..
     }: &Screen,
     context: &CanvasRenderingContext2d,
 ) {

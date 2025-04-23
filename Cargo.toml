@@ -11,7 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 ndarray = "0.16.1"
 wasm-bindgen = "0.2"
-wasm-timer = "0.2.5"
 
 [dependencies.web-sys]
 version = "0.3.77"
@@ -23,4 +22,7 @@ features = [
   'Node',
   'Window',
   'console',
+  'EventTarget',
+  'KeyboardEvent',
+  'MouseEvent'
 ]

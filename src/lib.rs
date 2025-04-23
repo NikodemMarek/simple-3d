@@ -1,11 +1,13 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use web_sys::KeyboardEvent;
+use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
 mod rendering;
-mod types2d;
 mod types3d;
 
 fn window() -> web_sys::Window {
@@ -28,7 +30,7 @@ pub fn start() -> Result<(), JsValue> {
     let height = canvas.client_height() as f64;
     let camera = Camera {
         screen_size: (width, height),
-        position: (0.0, 0.0, 1.0).into(),
+        position: (0.0, 0.0, 3.0).into(),
         target: (0.0, 0.0, -1.0).into(),
         up: (0.0, 1.0, 0.0).into(),
         fov: std::f64::consts::PI / 2.0,
@@ -42,6 +44,8 @@ pub fn start() -> Result<(), JsValue> {
 
     register_resize_listener(&canvas, &camera);
     register_timer(50, &camera);
+    register_keypress_listener(&camera);
+    register_mouse_drag_listener(&camera);
 
     start_animation_loop(context, &camera);
 
@@ -73,6 +77,7 @@ fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement, camera: &Rc<RefCell
     canvas.set_height(height);
 
     camera.borrow_mut().screen_size = (width as f64, height as f64);
+    camera.borrow_mut().aspect_ratio = width as f64 / height as f64;
 }
 
 fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>, camera: &Rc<RefCell<Camera>>) {
@@ -91,7 +96,8 @@ fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>, camera: &Rc<RefCell<
 fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
     let camera = Rc::clone(camera);
     let closure = Closure::wrap(Box::new(move || {
-        camera.borrow_mut().position.z -= 0.01;
+        camera.borrow_mut().position.x -= 0.01;
+        camera.borrow_mut().position.y += 0.01;
     }) as Box<dyn FnMut()>);
 
     window()
@@ -101,6 +107,75 @@ fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
         )
         .unwrap();
     closure.forget(); // Keep it alive
+}
+
+fn register_keypress_listener(camera: &Rc<RefCell<Camera>>) {
+    let camera = Rc::clone(camera);
+    let closure = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+        let key = event.key();
+        web_sys::console::log_1(&format!("Key pressed: {}", key).into());
+        match key.as_ref() {
+            "ArrowUp" => {
+                camera.borrow_mut().position.y += 0.1;
+            }
+            "ArrowDown" => {
+                camera.borrow_mut().position.y -= 0.1;
+            }
+            "ArrowLeft" => {
+                camera.borrow_mut().position.x -= 0.1;
+            }
+            "ArrowRight" => {
+                camera.borrow_mut().position.x += 0.1;
+            }
+            _ => {}
+        }
+    }) as Box<dyn FnMut(_)>);
+
+    window()
+        .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())
+        .unwrap();
+    closure.forget(); // Keep it alive
+}
+
+fn register_mouse_drag_listener(camera: &Rc<RefCell<Camera>>) {
+    let camera = Rc::clone(camera);
+
+    let is_held = Rc::new(Cell::new(false));
+    let md_is_held = Rc::clone(&is_held);
+    let mousedown_closure = Closure::wrap(Box::new(move |_: MouseEvent| {
+        md_is_held.set(true);
+    }) as Box<dyn FnMut(_)>);
+    let mu_is_held = Rc::clone(&is_held);
+    let mouseup_closure = Closure::wrap(Box::new(move |_: MouseEvent| {
+        mu_is_held.set(false);
+    }) as Box<dyn FnMut(_)>);
+
+    let move_closure = Closure::wrap(Box::new(move |event: MouseEvent| {
+        if !is_held.get() {
+            return;
+        }
+
+        let x = event.client_x() as f64;
+        let y = event.client_y() as f64;
+
+        let (width, height) = camera.borrow().screen_size;
+        camera.borrow_mut().target.x = (x - width / 2.0) / 100.0;
+        camera.borrow_mut().target.y = (y - height / 2.0) / 100.0;
+        camera.borrow_mut().target.z = -1.0;
+    }) as Box<dyn FnMut(_)>);
+
+    window()
+        .add_event_listener_with_callback("mousedown", mousedown_closure.as_ref().unchecked_ref())
+        .unwrap();
+    window()
+        .add_event_listener_with_callback("mouseup", mouseup_closure.as_ref().unchecked_ref())
+        .unwrap();
+    window()
+        .add_event_listener_with_callback("mousemove", move_closure.as_ref().unchecked_ref())
+        .unwrap();
+    mousedown_closure.forget(); // Keep it alive
+    mouseup_closure.forget(); // Keep it alive
+    move_closure.forget(); // Keep it alive
 }
 
 #[derive(Debug)]

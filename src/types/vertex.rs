@@ -7,9 +7,6 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn new(position: impl Into<Vector<3>>) -> Self {
-        Self::textured(position, (0.0, 0.0))
-    }
     pub fn textured(position: impl Into<Vector<3>>, texture: impl Into<Vector<2>>) -> Self {
         Self {
             position: position.into(),
@@ -31,4 +28,18 @@ pub fn transform(
     vertexes: impl Iterator<Item = Vertex>,
 ) -> impl Iterator<Item = Vertex> {
     vertexes.map(|v| v.transformed(transformation))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::types::{matrix::Matrix, vertex::Vertex};
+
+    #[test]
+    fn test_transformed_vertex() {
+        let vertex = Vertex::textured((1.0, 2.0, 3.0), (0.5, 0.5));
+        let transformation = Matrix::identity();
+        let transformed_vertex = vertex.transformed(&transformation);
+        assert_eq!(transformed_vertex.position, vertex.position);
+        assert_eq!(transformed_vertex.texture, vertex.texture);
+    }
 }

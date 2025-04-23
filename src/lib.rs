@@ -1,3 +1,6 @@
+#![feature(test)]
+extern crate test;
+
 use rasterizing::Screen;
 use r#static::shapes;
 use std::cell::Cell;
@@ -255,22 +258,25 @@ fn start_animation_loop(scene: &Rc<RefCell<Scene>>) {
     let context = context();
     let scene = Rc::clone(scene);
 
+    render(&mut scene.borrow_mut(), &context);
+
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        let mut scene = scene.borrow_mut();
-
-        rendering::render(&mut scene);
-        draw(&scene.screen, &context);
-        scene.screen.clear_buffer();
-
-        web_sys::console::log_1(&"Rendering frame".into());
-
+        render(&mut scene.borrow_mut(), &context);
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
 
     request_animation_frame(g.borrow().as_ref().unwrap());
 }
 
-#[derive(Debug, Copy, Clone)]
+fn render(scene: &mut Scene, context: &CanvasRenderingContext2d) {
+    rendering::render(scene);
+    draw(&scene.screen, context);
+    scene.screen.clear_buffer();
+
+    web_sys::console::log_1(&"Rendering frame".into());
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Pixel(pub u8, pub u8, pub u8, pub u8);
 impl Default for Pixel {
     fn default() -> Self {

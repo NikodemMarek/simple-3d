@@ -24,7 +24,7 @@
       };
 
       craneLib = (crane.mkLib pkgs).overrideToolchain (p:
-        p.rust-bin.stable.latest.default.override {
+        p.rust-bin.nightly.latest.default.override {
           targets = ["wasm32-unknown-unknown"];
         });
 
@@ -58,11 +58,12 @@
       devShells.default = let
         alias-build = pkgs.writeShellScriptBin "b" ''${pkgs.cargo-watch}/bin/cargo-watch -s "wasm-pack build --target web" -c'';
         alias-test = pkgs.writeShellScriptBin "t" ''${pkgs.cargo-watch}/bin/cargo-watch -x test -c'';
+        alias-profile = pkgs.writeShellScriptBin "p" ''cargo bench'';
         alias-serve = pkgs.writeShellScriptBin "s" ''${pkgs.python3}/bin/python3 -m http.server 9999'';
       in
         craneLib.devShell {
           checks = self.checks.${system};
-          buildInputs = [alias-build alias-test alias-serve];
+          buildInputs = [alias-build alias-test alias-profile alias-serve];
           packages = [];
         };
     });

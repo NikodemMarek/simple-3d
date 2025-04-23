@@ -35,7 +35,7 @@ pub fn render(scene: &mut Scene) {
                     Pixel(r, g, b, a)
                 }
             };
-            crate::rasterizing::rasterize_triangle(&mut scene.screen, triangle, pixel);
+            crate::rasterizing::rasterize_triangle(&mut scene.screen, &triangle, pixel);
         }
     }
 }

@@ -85,4 +85,5 @@ impl<'a, I: Iterator<Item = &'a (usize, usize, usize)>> TriangleIterator<'a, I> 
     }
 }
 
+#[derive(Debug)]
 pub struct Triangle(pub Vertex, pub Vertex, pub Vertex);

@@ -1,6 +1,8 @@
 use rasterizing::Screen;
+use shapes::Mesh;
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -13,6 +15,8 @@ mod matrix;
 mod rasterizing;
 mod rendering;
 mod shapes;
+mod textures;
+mod transformations;
 mod vector;
 
 fn window() -> web_sys::Window {
@@ -46,8 +50,9 @@ fn context() -> CanvasRenderingContext2d {
 pub fn start() -> Result<(), JsValue> {
     let width = canvas().client_width() as u32;
     let height = canvas().client_height() as u32;
+
+    let screen = Screen::new(width, height);
     let camera = Camera {
-        screen: Screen::new(width, height),
         position: (0.0, 0.0, 5.0).into(),
         target: (0.0, 0.0, 0.0).into(),
         up: (0.0, 1.0, 0.0).into(),
@@ -56,40 +61,60 @@ pub fn start() -> Result<(), JsValue> {
         near: 0.1,
         far: 100.0,
     };
-    let camera = Rc::new(RefCell::new(camera));
+    let textures = textures::init();
 
-    resize_display(&camera);
+    let mut cube = shapes::cube();
+    cube.texture = "cube".into();
+
+    let transformation = transformations::translation(&(0.0, 0.0, 2.0).into())
+        * transformations::rotation_x(std::f64::consts::FRAC_PI_4)
+        * transformations::scaling(&(0.2, 0.2, 0.2).into());
+    let mut cube2 = shapes::cube().transformed(&transformation);
+    cube2.texture = "cube".into();
+
+    let objects = Vec::from([cube, cube2]);
+    let scene = Rc::new(RefCell::new(Scene {
+        screen,
+        camera,
+        textures,
+        objects,
+    }));
+
+    resize_display(&scene);
     {
-        let camera = Rc::clone(&camera);
+        let scene = Rc::clone(&scene);
         register_event_listener("resize", move |_: Event| {
-            resize_display(&camera);
+            resize_display(&scene);
         });
     }
 
     {
-        let camera = Rc::clone(&camera);
+        let scene = Rc::clone(&scene);
+        let transformation = transformations::rotation_y(0.1);
+        let transformation2 = transformations::rotation_x(0.1);
         register_timer(50, move || {
-            // camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
+            scene.borrow_mut().objects[0].transform(&transformation);
+            scene.borrow_mut().objects[1].transform(&transformation2);
         });
     }
 
     {
-        let camera = Rc::clone(&camera);
+        let scene = Rc::clone(&scene);
         register_event_listener("keydown", move |event: KeyboardEvent| {
             let key = event.key();
             web_sys::console::log_1(&format!("Key pressed: {}", key).into());
             match key.as_ref() {
                 "ArrowUp" => {
-                    camera.borrow_mut().position += (0.0, 0.1, 0.0).into();
+                    scene.borrow_mut().camera.position += (0.0, 0.1, 0.0).into();
                 }
                 "ArrowDown" => {
-                    camera.borrow_mut().position += (0.0, -0.1, 0.0).into();
+                    scene.borrow_mut().camera.position += (0.0, -0.1, 0.0).into();
                 }
                 "ArrowLeft" => {
-                    camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
+                    scene.borrow_mut().camera.position += (-0.1, 0.0, 0.0).into();
                 }
                 "ArrowRight" => {
-                    camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
+                    scene.borrow_mut().camera.position += (0.1, 0.0, 0.0).into();
                 }
                 _ => {}
             }
@@ -118,7 +143,7 @@ pub fn start() -> Result<(), JsValue> {
         }
 
         {
-            let camera = Rc::clone(&camera);
+            let scene = Rc::clone(&scene);
             let is_held = Rc::clone(&is_held);
             let last_mouse = Rc::clone(&last_mouse);
             let azimuth = Rc::clone(&azimuth);
@@ -146,25 +171,27 @@ pub fn start() -> Result<(), JsValue> {
                 );
                 *elevation.borrow_mut() = elev;
 
-                let radius = (camera.borrow().position - camera.borrow().target).magnitude();
+                let radius =
+                    (scene.borrow().camera.position - scene.borrow().camera.target).magnitude();
 
                 let az = *azimuth.borrow();
                 let x = radius * elev.cos() * az.sin();
                 let y = radius * elev.sin();
                 let z = radius * elev.cos() * az.cos();
 
-                let new_pos = Into::<vector::Vector<3>>::into((x, y, z)) + camera.borrow().target;
-                camera.borrow_mut().position = new_pos;
+                let new_pos =
+                    Into::<vector::Vector<3>>::into((x, y, z)) + scene.borrow().camera.target;
+                scene.borrow_mut().camera.position = new_pos;
             });
         }
     }
 
-    start_animation_loop(&camera);
+    start_animation_loop(&scene);
 
     Ok(())
 }
 
-fn resize_display(camera: &Rc<RefCell<Camera>>) {
+fn resize_display(scene: &Rc<RefCell<Scene>>) {
     let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
     let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
 
@@ -172,9 +199,9 @@ fn resize_display(camera: &Rc<RefCell<Camera>>) {
     canvas.set_width(width);
     canvas.set_height(height);
 
-    let mut camera = camera.borrow_mut();
-    camera.screen = Screen::new(width, height);
-    camera.aspect_ratio = width as f64 / height as f64;
+    let mut scene = scene.borrow_mut();
+    scene.screen = Screen::new(width, height);
+    scene.camera.aspect_ratio = width as f64 / height as f64;
 }
 
 fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
@@ -205,9 +232,15 @@ where
 }
 
 #[derive(Debug)]
-struct Camera {
+struct Scene {
     screen: Screen,
+    camera: Camera,
+    textures: HashMap<Box<str>, textures::Texture>,
+    objects: Vec<Mesh>,
+}
 
+#[derive(Debug)]
+struct Camera {
     position: vector::Vector<3>,
     target: vector::Vector<3>,
     up: vector::Vector<3>,
@@ -225,18 +258,18 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestAnimationFrame` OK");
 }
 
-fn start_animation_loop(camera: &Rc<RefCell<Camera>>) {
+fn start_animation_loop(scene: &Rc<RefCell<Scene>>) {
     let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
     let g = Rc::clone(&f);
     let context = context();
-    let camera = Rc::clone(camera);
+    let scene = Rc::clone(scene);
 
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        let mut camera = camera.borrow_mut();
+        let mut scene = scene.borrow_mut();
 
-        rendering::render(&mut camera);
-        draw(&camera.screen, &context);
-        camera.screen.clear_buffer();
+        rendering::render(&mut scene);
+        draw(&scene.screen, &context);
+        scene.screen.clear_buffer();
 
         web_sys::console::log_1(&"Rendering frame".into());
 
@@ -269,9 +302,6 @@ fn draw(
     context.put_image_data(&image_data, 0.0, 0.0).unwrap();
 }
 
-fn mk_pixel_array(width: u32, height: u32) -> Vec<Pixel> {
-    vec![Pixel::default(); (width * height) as usize]
-}
 fn mk_image_data(width: u32, height: u32, data: &[Pixel]) -> web_sys::ImageData {
     let data = data
         .iter()

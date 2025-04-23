@@ -1,74 +1,30 @@
 use crate::{
-    Camera, Pixel,
+    Camera, Pixel, Scene,
     matrix::Matrix,
     rasterizing::Screen,
-    shapes::{Mesh, Texture, Vertex},
+    shapes::{Mesh, Vertex},
+    textures::Texture,
     vector::Vector,
 };
 
-pub fn render(camera: &mut Camera) {
-    let texture = Texture::Triangles(Box::new([
-        (255, 0, 0, 255),
-        (255, 0, 0, 255),
-        (0, 255, 0, 255),
-        (0, 255, 0, 255),
-        (0, 0, 255, 255),
-        (0, 0, 255, 255),
-        (255, 255, 0, 255),
-        (255, 255, 0, 255),
-        (255, 0, 255, 255),
-        (255, 0, 255, 255),
-        (0, 255, 255, 255),
-        (0, 255, 255, 255),
-    ]));
-    let cube = Mesh::textured(
-        [
-            Vertex::textured((1.0, 1.0, 1.0), (0.0, 0.0)), // 0 - Front top right
-            Vertex::textured((1.0, -1.0, 1.0), (0.0, 0.0)), // 1 - Front bottom right
-            Vertex::textured((-1.0, -1.0, 1.0), (0.0, 0.0)), // 2 - Front bottom left
-            Vertex::textured((-1.0, 1.0, 1.0), (0.0, 0.0)), // 3 - Front top left
-            Vertex::textured((1.0, 1.0, -1.0), (1.0, 0.0)), // 4 - Back top right
-            Vertex::textured((1.0, -1.0, -1.0), (1.0, 0.0)), // 5 - Back bottom right
-            Vertex::textured((-1.0, -1.0, -1.0), (1.0, 0.0)), // 6 - Back bottom left
-            Vertex::textured((-1.0, 1.0, -1.0), (1.0, 0.0)), // 7 - Back top left
-        ],
-        &[
-            // Front face (z = +1)
-            (0, 2, 1),
-            (0, 3, 2),
-            // Back face (z = -1)
-            (4, 5, 6),
-            (4, 6, 7),
-            // Right face (x = +1)
-            (0, 4, 5),
-            (0, 5, 1),
-            // Left face (x = -1)
-            (2, 6, 7),
-            (2, 7, 3),
-            // Top face (y = +1)
-            (0, 7, 4),
-            (0, 3, 7),
-            // Bottom face (y = -1)
-            (1, 5, 6),
-            (1, 6, 2),
-        ],
-        &texture,
-    );
+pub fn render(scene: &mut Scene) {
+    scene.screen.clear_depth();
 
-    camera.screen.clear_depth();
+    for object in scene.objects.iter() {
+        let to_draw = transform_mesh(scene, object);
+        let texture = &to_draw.texture;
 
-    let to_draw = transform_mesh(camera, &cube);
-    let texture = to_draw.texture;
-    for (i, triangle) in to_draw.into_iter().enumerate() {
-        let pixel = match texture {
-            Texture::None => Pixel::default(),
-            Texture::Solid(r, g, b, a) => Pixel(*r, *g, *b, *a),
-            Texture::Triangles(texture) => {
-                let (r, g, b, a) = texture[i % texture.len()];
-                Pixel(r, g, b, a)
-            }
-        };
-        crate::rasterizing::rasterize_triangle(&mut camera.screen, triangle, pixel);
+        for (i, triangle) in to_draw.into_iter().enumerate() {
+            let pixel = match scene.textures.get(texture.as_ref()).unwrap() {
+                Texture::None => Pixel::default(),
+                Texture::Solid(r, g, b, a) => Pixel(*r, *g, *b, *a),
+                Texture::Triangles(texture) => {
+                    let (r, g, b, a) = texture[i % texture.len()];
+                    Pixel(r, g, b, a)
+                }
+            };
+            crate::rasterizing::rasterize_triangle(&mut scene.screen, triangle, pixel);
+        }
     }
 }
 
@@ -127,16 +83,17 @@ fn viewport_matrix(Screen { width, height, .. }: &Screen) -> Matrix<4, 4> {
     .into()
 }
 
-fn transform_mesh<'a>(
-    camera: &Camera,
+fn transform_mesh(
+    scene: &Scene,
     Mesh {
         vertices,
         indices,
         texture,
-    }: &'a Mesh,
-) -> Mesh<'a> {
-    let transformation =
-        viewport_matrix(&camera.screen) * projection_matrix(camera) * view_matrix(camera);
+    }: &Mesh,
+) -> Mesh {
+    let transformation = viewport_matrix(&scene.screen)
+        * projection_matrix(&scene.camera)
+        * view_matrix(&scene.camera);
 
     Mesh::textured(
         vertices
@@ -144,7 +101,7 @@ fn transform_mesh<'a>(
             .map(|v| Vertex::new(pipeline(&transformation, v.position)))
             .collect::<Vec<_>>(),
         indices,
-        texture,
+        texture.clone(),
     )
 }
 

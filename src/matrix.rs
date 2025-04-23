@@ -1,5 +1,6 @@
 use crate::vector::Vector;
 
+#[derive(Debug, Clone)]
 pub struct Matrix<const M: usize, const N: usize>([[f64; N]; M]);
 
 impl<const M: usize, const N: usize> Matrix<M, N> {

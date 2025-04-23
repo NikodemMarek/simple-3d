@@ -96,10 +96,16 @@ pub fn start() -> Result<(), JsValue> {
 
     {
         let is_held = Rc::new(Cell::new(false));
+        let last_mouse = Rc::new(RefCell::new((0.0f64, 0.0f64)));
+        let azimuth = Rc::new(RefCell::new(0.0f64));
+        let elevation = Rc::new(RefCell::new(0.0f64));
+
         {
             let is_held = Rc::clone(&is_held);
-            register_event_listener("mousedown", move |_: MouseEvent| {
+            let last_mouse = Rc::clone(&last_mouse);
+            register_event_listener("mousedown", move |event: MouseEvent| {
                 is_held.set(true);
+                *last_mouse.borrow_mut() = (event.client_x() as f64, event.client_y() as f64);
             });
         }
         {
@@ -109,19 +115,46 @@ pub fn start() -> Result<(), JsValue> {
             });
         }
 
-        let camera = Rc::clone(&camera);
-        register_event_listener("mousemove", move |event: MouseEvent| {
-            if !is_held.get() {
-                return;
-            }
+        {
+            let camera = Rc::clone(&camera);
+            let is_held = Rc::clone(&is_held);
+            let last_mouse = Rc::clone(&last_mouse);
+            let azimuth = Rc::clone(&azimuth);
+            let elevation = Rc::clone(&elevation);
 
-            let x = event.client_x() as f64;
-            let y = event.client_y() as f64;
+            register_event_listener("mousemove", move |event: MouseEvent| {
+                if !is_held.get() {
+                    return;
+                }
 
-            let (width, height) = camera.borrow().screen_size;
-            camera.borrow_mut().target +=
-                ((x - width / 2.0) / 100.0, (y - height / 2.0) / 100.0, -1.0).into();
-        });
+                let (last_x, last_y) = *last_mouse.borrow();
+                let x = event.client_x() as f64;
+                let y = event.client_y() as f64;
+                let delta_x = x - last_x;
+                let delta_y = y - last_y;
+                *last_mouse.borrow_mut() = (x, y);
+
+                let sensitivity = 0.005;
+                *azimuth.borrow_mut() += delta_x * sensitivity;
+                *elevation.borrow_mut() += delta_y * sensitivity;
+
+                let elev = elevation.borrow().clamp(
+                    -std::f64::consts::FRAC_PI_2 + 0.01,
+                    std::f64::consts::FRAC_PI_2 - 0.01,
+                );
+                *elevation.borrow_mut() = elev;
+
+                let radius = (camera.borrow().position - camera.borrow().target).magnitude();
+
+                let az = *azimuth.borrow();
+                let x = radius * elev.cos() * az.sin();
+                let y = radius * elev.sin();
+                let z = radius * elev.cos() * az.cos();
+
+                let new_pos = Into::<vectors::Vector<3>>::into((x, y, z)) + camera.borrow().target;
+                camera.borrow_mut().position = new_pos;
+            });
+        }
     }
 
     start_animation_loop(&camera);

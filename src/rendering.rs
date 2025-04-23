@@ -6,120 +6,60 @@ pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
     let (width, height) = camera.screen_size;
     context.clear_rect(0.0, 0.0, width, height);
 
-    let cube = [
+    let cube: [(Triangle<3>, &str); 12] = [
         // Front face (z = -1.0)
         (
-            (
-                (0.0, 0.0, -1.0).into(),
-                (1.0, 0.0, -1.0).into(),
-                (0.0, 1.0, -1.0).into(),
-            )
-                .into(),
+            ((0.0, 0.0, -1.0), (1.0, 0.0, -1.0), (0.0, 1.0, -1.0)).into(),
             "red",
         ),
         (
-            (
-                (1.0, 0.0, -1.0).into(),
-                (1.0, 1.0, -1.0).into(),
-                (0.0, 1.0, -1.0).into(),
-            )
-                .into(),
+            ((1.0, 0.0, -1.0), (1.0, 1.0, -1.0), (0.0, 1.0, -1.0)).into(),
             "red",
         ),
         // Back face (z = 0.0)
         (
-            (
-                (1.0, 0.0, 0.0).into(),
-                (0.0, 0.0, 0.0).into(),
-                (0.0, 1.0, 0.0).into(),
-            )
-                .into(),
+            ((1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0)).into(),
             "green",
         ),
         (
-            (
-                (1.0, 0.0, 0.0).into(),
-                (0.0, 1.0, 0.0).into(),
-                (1.0, 1.0, 0.0).into(),
-            )
-                .into(),
+            ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 1.0, 0.0)).into(),
             "green",
         ),
         // Left face (x = 0.0)
         (
-            (
-                (0.0, 0.0, 0.0).into(),
-                (0.0, 0.0, -1.0).into(),
-                (0.0, 1.0, -1.0).into(),
-            )
-                .into(),
+            ((0.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, -1.0)).into(),
             "blue",
         ),
         (
-            (
-                (0.0, 0.0, 0.0).into(),
-                (0.0, 1.0, -1.0).into(),
-                (0.0, 1.0, 0.0).into(),
-            )
-                .into(),
+            ((0.0, 0.0, 0.0), (0.0, 1.0, -1.0), (0.0, 1.0, 0.0)).into(),
             "blue",
         ),
         // Right face (x = 1.0)
         (
-            (
-                (1.0, 0.0, -1.0).into(),
-                (1.0, 0.0, 0.0).into(),
-                (1.0, 1.0, 0.0).into(),
-            )
-                .into(),
+            ((1.0, 0.0, -1.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)).into(),
             "yellow",
         ),
         (
-            (
-                (1.0, 0.0, -1.0).into(),
-                (1.0, 1.0, 0.0).into(),
-                (1.0, 1.0, -1.0).into(),
-            )
-                .into(),
+            ((1.0, 0.0, -1.0), (1.0, 1.0, 0.0), (1.0, 1.0, -1.0)).into(),
             "yellow",
         ),
         // Top face (y = 1.0)
         (
-            (
-                (0.0, 1.0, -1.0).into(),
-                (1.0, 1.0, -1.0).into(),
-                (1.0, 1.0, 0.0).into(),
-            )
-                .into(),
-            "pink",
+            ((0.0, 1.0, -1.0), (1.0, 1.0, -1.0), (1.0, 1.0, 0.0)).into(),
+            "cyan",
         ),
         (
-            (
-                (0.0, 1.0, -1.0).into(),
-                (1.0, 1.0, 0.0).into(),
-                (0.0, 1.0, 0.0).into(),
-            )
-                .into(),
-            "pink",
+            ((0.0, 1.0, -1.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)).into(),
+            "cyan",
         ),
         // Bottom face (y = 0.0)
         (
-            (
-                (0.0, 0.0, 0.0).into(),
-                (1.0, 0.0, 0.0).into(),
-                (1.0, 0.0, -1.0).into(),
-            )
-                .into(),
-            "lightblue",
+            ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, -1.0)).into(),
+            "pink",
         ),
         (
-            (
-                (0.0, 0.0, 0.0).into(),
-                (1.0, 0.0, -1.0).into(),
-                (0.0, 0.0, -1.0).into(),
-            )
-                .into(),
-            "lightblue",
+            ((0.0, 0.0, 0.0), (1.0, 0.0, -1.0), (0.0, 0.0, -1.0)).into(),
+            "pink",
         ),
     ];
 
@@ -128,9 +68,9 @@ pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
         .map(|(triangle, color)| (project_triangle(camera, *triangle), color))
         .collect::<Vec<_>>();
 
-    to_draw.sort_by(|(a, _), (b, _)| {
-        let a_z = (a.0[2] + a.1[2] + a.2[2]) / 3.0;
-        let b_z = (b.0[2] + b.1[2] + b.2[2]) / 3.0;
+    to_draw.sort_by(|a, b| {
+        let a_z = (a.0.0[2] + a.0.1[2] + a.0.2[2]) / 3.0;
+        let b_z = (b.0.0[2] + b.0.1[2] + b.0.2[2]) / 3.0;
         a_z.partial_cmp(&b_z).unwrap()
     });
 
@@ -184,11 +124,12 @@ fn view_matrix(
 }
 
 fn project_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
-    Triangle(
+    (
         pipeline(camera, a),
         pipeline(camera, b),
         pipeline(camera, c),
     )
+        .into()
 }
 
 fn pipeline(camera: &Camera, point: Vector<3>) -> Vector<3> {

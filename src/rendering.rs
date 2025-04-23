@@ -1,10 +1,7 @@
 use ndarray::arr2;
 use web_sys::CanvasRenderingContext2d;
 
-use crate::{
-    Camera,
-    types3d::{Point3d, Triangle3d, Vector},
-};
+use crate::{Camera, shapes::Triangle, vectors::Vector};
 
 pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
     let (width, height) = camera.screen_size;
@@ -13,56 +10,116 @@ pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
     let cube = [
         // Front face (z = -1.0)
         (
-            [(0.0, 0.0, -1.0), (1.0, 0.0, -1.0), (0.0, 1.0, -1.0)].into(),
+            (
+                (0.0, 0.0, -1.0).into(),
+                (1.0, 0.0, -1.0).into(),
+                (0.0, 1.0, -1.0).into(),
+            )
+                .into(),
             "red",
         ),
         (
-            [(1.0, 0.0, -1.0), (1.0, 1.0, -1.0), (0.0, 1.0, -1.0)].into(),
+            (
+                (1.0, 0.0, -1.0).into(),
+                (1.0, 1.0, -1.0).into(),
+                (0.0, 1.0, -1.0).into(),
+            )
+                .into(),
             "red",
         ),
         // Back face (z = 0.0)
         (
-            [(1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0)].into(),
+            (
+                (1.0, 0.0, 0.0).into(),
+                (0.0, 0.0, 0.0).into(),
+                (0.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "green",
         ),
         (
-            [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 1.0, 0.0)].into(),
+            (
+                (1.0, 0.0, 0.0).into(),
+                (0.0, 1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "green",
         ),
         // Left face (x = 0.0)
         (
-            [(0.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, -1.0)].into(),
+            (
+                (0.0, 0.0, 0.0).into(),
+                (0.0, 0.0, -1.0).into(),
+                (0.0, 1.0, -1.0).into(),
+            )
+                .into(),
             "blue",
         ),
         (
-            [(0.0, 0.0, 0.0), (0.0, 1.0, -1.0), (0.0, 1.0, 0.0)].into(),
+            (
+                (0.0, 0.0, 0.0).into(),
+                (0.0, 1.0, -1.0).into(),
+                (0.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "blue",
         ),
         // Right face (x = 1.0)
         (
-            [(1.0, 0.0, -1.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)].into(),
+            (
+                (1.0, 0.0, -1.0).into(),
+                (1.0, 0.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "yellow",
         ),
         (
-            [(1.0, 0.0, -1.0), (1.0, 1.0, 0.0), (1.0, 1.0, -1.0)].into(),
+            (
+                (1.0, 0.0, -1.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (1.0, 1.0, -1.0).into(),
+            )
+                .into(),
             "yellow",
         ),
         // Top face (y = 1.0)
         (
-            [(0.0, 1.0, -1.0), (1.0, 1.0, -1.0), (1.0, 1.0, 0.0)].into(),
+            (
+                (0.0, 1.0, -1.0).into(),
+                (1.0, 1.0, -1.0).into(),
+                (1.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "pink",
         ),
         (
-            [(0.0, 1.0, -1.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)].into(),
+            (
+                (0.0, 1.0, -1.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (0.0, 1.0, 0.0).into(),
+            )
+                .into(),
             "pink",
         ),
         // Bottom face (y = 0.0)
         (
-            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, -1.0)].into(),
+            (
+                (0.0, 0.0, 0.0).into(),
+                (1.0, 0.0, 0.0).into(),
+                (1.0, 0.0, -1.0).into(),
+            )
+                .into(),
             "lightblue",
         ),
         (
-            [(0.0, 0.0, 0.0), (1.0, 0.0, -1.0), (0.0, 0.0, -1.0)].into(),
+            (
+                (0.0, 0.0, 0.0).into(),
+                (1.0, 0.0, -1.0).into(),
+                (0.0, 0.0, -1.0).into(),
+            )
+                .into(),
             "lightblue",
         ),
     ];
@@ -73,8 +130,8 @@ pub fn render(context: &CanvasRenderingContext2d, camera: &Camera) {
         .collect::<Vec<_>>();
 
     to_draw.sort_by(|(a, _), (b, _)| {
-        let a_z = (a.0.z + a.1.z + a.2.z) / 3.0;
-        let b_z = (b.0.z + b.1.z + b.2.z) / 3.0;
+        let a_z = (a.0[2] + a.1[2] + a.2[2]) / 3.0;
+        let b_z = (b.0[2] + b.1[2] + b.2[2]) / 3.0;
         a_z.partial_cmp(&b_z).unwrap()
     });
 
@@ -114,70 +171,66 @@ fn view_matrix(
         ..
     }: &Camera,
 ) -> [[f64; 4]; 4] {
-    let f = (target - position).normalize();
+    let f = (*target - *position).normalize();
     let r = f.cross(*up).normalize();
     let u = r.cross(f);
     [
-        [r.x, r.y, r.z, -r.dot(*position)],
-        [u.x, u.y, u.z, u.dot(*position)],
-        [-f.x, -f.y, -f.z, -f.dot(*position)],
+        [r[0], r[1], r[2], -r.dot(*position)],
+        [u[0], u[1], u[2], u.dot(*position)],
+        [-f[0], -f[1], -f[2], -f.dot(*position)],
         [0.0, 0.0, 0.0, 1.0],
     ]
 }
 
-fn project_triangle(camera: &Camera, Triangle3d(a, b, c): Triangle3d) -> Triangle3d {
-    Triangle3d(
+fn project_triangle(camera: &Camera, Triangle(a, b, c): Triangle<3>) -> Triangle<3> {
+    Triangle(
         pipeline(camera, a),
         pipeline(camera, b),
         pipeline(camera, c),
     )
 }
 
-fn pipeline(camera: &Camera, point: Point3d) -> Point3d {
+fn pipeline(camera: &Camera, point: Vector<3>) -> Vector<3> {
     viewport_transformation(
         camera,
         projection_transformation(camera, camera_transformation(camera, point)),
     )
 }
 
-fn projection_transformation(camera: &Camera, point: Point3d) -> Point3d {
+fn projection_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
     let projection = arr2(&projection_matrix(camera));
     let v = projection.dot(&arr2(&point.homogenous()));
-    Point3d {
-        x: v[[0, 0]] / v[[3, 0]],
-        y: v[[1, 0]] / v[[3, 0]],
-        z: v[[2, 0]] / v[[3, 0]],
-    }
+    (
+        v[[0, 0]] / v[[3, 0]],
+        v[[1, 0]] / v[[3, 0]],
+        v[[2, 0]] / v[[3, 0]],
+    )
+        .into()
 }
 
-fn camera_transformation(camera: &Camera, point: Point3d) -> Point3d {
+fn camera_transformation(camera: &Camera, point: Vector<3>) -> Vector<3> {
     let view = arr2(&view_matrix(camera));
     let v = view.dot(&arr2(&point.homogenous()));
-    Point3d {
-        x: v[[0, 0]],
-        y: v[[1, 0]],
-        z: v[[2, 0]],
-    }
+    (v[[0, 0]], v[[1, 0]], v[[2, 0]]).into()
 }
 
-fn viewport_transformation(camera: &Camera, Point3d { x, y, z }: Point3d) -> Point3d {
+fn viewport_transformation(camera: &Camera, vec: Vector<3>) -> Vector<3> {
+    let [x, y, z] = *vec;
     let (width, height) = camera.screen_size;
-    Point3d {
-        x: (x + 1.0) * width / 2.0,
-        y: (1.0 - y) * height / 2.0,
-        z,
-    }
+    ((x + 1.0) * width / 2.0, (1.0 - y) * height / 2.0, z).into()
 }
 
-fn draw_triangle(context: &CanvasRenderingContext2d, triangle: Triangle3d, color: &str) {
-    let Triangle3d(a, b, c) = triangle;
+fn draw_triangle(context: &CanvasRenderingContext2d, Triangle(a, b, c): Triangle<3>, color: &str) {
+    let [a_x, a_y, _] = *a;
+    let [b_x, b_y, _] = *b;
+    let [c_x, c_y, _] = *c;
 
     context.set_fill_style_str(color);
 
     context.begin_path();
-    context.move_to(a.x, a.y);
-    context.line_to(b.x, b.y);
-    context.line_to(c.x, c.y);
+    context.move_to(a_x, a_y);
+    context.line_to(b_x, b_y);
+    context.line_to(c_x, c_y);
     context.close_path();
     context.fill();
 }

@@ -8,7 +8,8 @@ use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
 mod rendering;
-mod types3d;
+mod shapes;
+mod vectors;
 
 fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -96,8 +97,7 @@ fn register_resize_listener(canvas: &Rc<HtmlCanvasElement>, camera: &Rc<RefCell<
 fn register_timer(interval: i32, camera: &Rc<RefCell<Camera>>) {
     let camera = Rc::clone(camera);
     let closure = Closure::wrap(Box::new(move || {
-        camera.borrow_mut().position.x -= 0.01;
-        camera.borrow_mut().position.y += 0.01;
+        camera.borrow_mut().position += (-0.01, 0.01, 0.0).into();
     }) as Box<dyn FnMut()>);
 
     window()
@@ -116,16 +116,16 @@ fn register_keypress_listener(camera: &Rc<RefCell<Camera>>) {
         web_sys::console::log_1(&format!("Key pressed: {}", key).into());
         match key.as_ref() {
             "ArrowUp" => {
-                camera.borrow_mut().position.y += 0.1;
+                camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
             }
             "ArrowDown" => {
-                camera.borrow_mut().position.y -= 0.1;
+                camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
             }
             "ArrowLeft" => {
-                camera.borrow_mut().position.x -= 0.1;
+                camera.borrow_mut().position += (-0.1, 0.0, 0.0).into();
             }
             "ArrowRight" => {
-                camera.borrow_mut().position.x += 0.1;
+                camera.borrow_mut().position += (0.1, 0.0, 0.0).into();
             }
             _ => {}
         }
@@ -159,9 +159,8 @@ fn register_mouse_drag_listener(camera: &Rc<RefCell<Camera>>) {
         let y = event.client_y() as f64;
 
         let (width, height) = camera.borrow().screen_size;
-        camera.borrow_mut().target.x = (x - width / 2.0) / 100.0;
-        camera.borrow_mut().target.y = (y - height / 2.0) / 100.0;
-        camera.borrow_mut().target.z = -1.0;
+        camera.borrow_mut().target +=
+            ((x - width / 2.0) / 100.0, (y - height / 2.0) / 100.0, -1.0).into();
     }) as Box<dyn FnMut(_)>);
 
     window()
@@ -182,9 +181,9 @@ fn register_mouse_drag_listener(camera: &Rc<RefCell<Camera>>) {
 struct Camera {
     screen_size: (f64, f64),
 
-    position: types3d::Point3d,
-    target: types3d::Point3d,
-    up: types3d::Point3d,
+    position: vectors::Vector<3>,
+    target: vectors::Vector<3>,
+    up: vectors::Vector<3>,
 
     fov: f64, // in radians
     aspect_ratio: f64,

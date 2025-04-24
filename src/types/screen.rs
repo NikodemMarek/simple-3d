@@ -50,7 +50,7 @@ impl Screen {
         self.depth.fill(f32::MAX);
     }
 
-    pub fn put_pixel(&mut self, (x, y, z): (u32, u32, f32), pixel: Pixel) {
+    pub fn put_pixel(&mut self, (x, y): (u32, u32), z: f32, pixel: Pixel) {
         if x < self.width && y < self.height {
             let index = (x + y * self.width) as usize;
             if z.is_finite() && z < self.depth[index] {

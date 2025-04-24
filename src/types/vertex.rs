@@ -3,14 +3,14 @@ use super::{matrix::Matrix, vector::Vector};
 #[derive(Debug, Copy, Clone)]
 pub struct Vertex {
     pub position: Vector<3>,
-    pub texture: Vector<2>,
+    pub uv: Vector<2>,
 }
 
 impl Vertex {
     pub fn textured(position: impl Into<Vector<3>>, texture: impl Into<Vector<2>>) -> Self {
         Self {
             position: position.into(),
-            texture: texture.into(),
+            uv: texture.into(),
         }
     }
 
@@ -18,7 +18,7 @@ impl Vertex {
         let v = transformation.dot(&self.position.homogenous());
         Self {
             position: (v[0] / v[3], v[1] / v[3], v[2] / v[3]).into(),
-            texture: self.texture,
+            uv: self.uv,
         }
     }
 }
@@ -40,6 +40,6 @@ mod tests {
         let transformation = Matrix::identity();
         let transformed_vertex = vertex.transformed(&transformation);
         assert_eq!(transformed_vertex.position, vertex.position);
-        assert_eq!(transformed_vertex.texture, vertex.texture);
+        assert_eq!(transformed_vertex.uv, vertex.uv);
     }
 }

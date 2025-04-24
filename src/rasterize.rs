@@ -1,0 +1,196 @@
+use crate::{
+    types::{
+        mesh::{Triangle, TriangleIterator},
+        pixel::Pixel,
+        textures::Texture,
+    },
+    vector::Vector,
+};
+
+pub fn rasterize<'a, I>(
+    texture: &'a Texture,
+    triangles: TriangleIterator<'a, I>,
+) -> impl Iterator<Item = ((u32, u32), f32, Pixel)>
+where
+    I: Iterator<Item = &'a (usize, usize, usize)>,
+{
+    triangles.flat_map(|triangle| triangle_points(texture, triangle))
+}
+
+pub fn triangle_points(
+    texture: &Texture,
+    triangle @ Triangle(a, b, c): Triangle,
+) -> impl Iterator<Item = ((u32, u32), f32, Pixel)> {
+    let pixel = match texture {
+        Texture::None => Pixel::default(),
+        Texture::Solid(r, g, b, a) => Pixel(*r, *g, *b, *a),
+        Texture::Triangles(texture) => Pixel(255, 0, 0, 255),
+    };
+
+    #[inline]
+    fn det(a: Vector<3>, b: Vector<3>, c: Vector<3>) -> f64 {
+        a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
+    }
+
+    #[inline]
+    fn bounds(Triangle(a, b, c): &Triangle) -> (u32, u32, u32, u32) {
+        let l = a.position[0].min(b.position[0]).min(c.position[0]).floor() as u32;
+        let r = a.position[0].max(b.position[0]).max(c.position[0]).ceil() as u32;
+        let t = a.position[1].min(b.position[1]).min(c.position[1]).floor() as u32;
+        let b = a.position[1].max(b.position[1]).max(c.position[1]).ceil() as u32;
+        (l, t, r, b)
+    }
+
+    #[inline]
+    fn points(
+        det_abc: f64,
+        (l, t, r, b): (u32, u32, u32, u32),
+    ) -> Box<dyn Iterator<Item = (u32, u32)>> {
+        if det_abc.abs() < f64::EPSILON {
+            Box::new(std::iter::empty())
+        } else {
+            Box::new((l..=r).flat_map(move |x| (t..=b).map(move |y| (x, y))))
+        }
+    }
+
+    let det_abc = det(a.position, b.position, c.position);
+    points(det_abc, bounds(&triangle)).filter_map(move |(x, y)| {
+        let p = (x as f64, y as f64, 0.0).into();
+        let det_abp = det(a.position, b.position, p);
+        let det_bcp = det(b.position, c.position, p);
+        let det_cap = det(c.position, a.position, p);
+
+        let alpha = det_bcp / det_abc;
+        let beta = det_cap / det_abc;
+        let gamma = det_abp / det_abc;
+
+        const EPSILON: f64 = 1e-10;
+        if alpha >= -EPSILON && beta >= -EPSILON && gamma >= -EPSILON {
+            let z_a = 1.0 / a.position[2];
+            let z_b = 1.0 / b.position[2];
+            let z_c = 1.0 / c.position[2];
+
+            let inv_z = alpha * z_a + beta * z_b + gamma * z_c;
+            let z = 1.0 / inv_z;
+
+            Some(((x, y), z as f32, pixel))
+        } else {
+            None
+        }
+    })
+}
+
+pub fn triangle_points_interpolation<'a>(
+    Triangle(a, b, c): &'a Triangle,
+) -> Box<dyn Iterator<Item = (u32, u32, f32)> + 'a> {
+    let [mut a_x, mut a_y, mut a_z] = *a.position;
+    let [mut b_x, mut b_y, mut b_z] = *b.position;
+    let [mut c_x, mut c_y, mut c_z] = *c.position;
+
+    if b_y < a_y {
+        std::mem::swap(&mut a_x, &mut b_x);
+        std::mem::swap(&mut a_y, &mut b_y);
+        std::mem::swap(&mut a_z, &mut b_z);
+    }
+    if c_y < a_y {
+        std::mem::swap(&mut a_x, &mut c_x);
+        std::mem::swap(&mut a_y, &mut c_y);
+        std::mem::swap(&mut a_z, &mut c_z);
+    }
+    if c_y < b_y {
+        std::mem::swap(&mut b_x, &mut c_x);
+        std::mem::swap(&mut b_y, &mut c_y);
+        std::mem::swap(&mut b_z, &mut c_z);
+    }
+
+    let mut x01 = interpolate(a_y, a_x, b_y, b_x).collect::<Vec<_>>();
+    let mut z01 = interpolate(a_y, a_z, b_y, b_z).collect::<Vec<_>>();
+
+    let x12 = interpolate(b_y, b_x, c_y, c_x).collect::<Vec<_>>();
+    let z12 = interpolate(b_y, b_z, c_y, c_z).collect::<Vec<_>>();
+
+    let x02 = interpolate(a_y, a_x, c_y, c_x).collect::<Vec<_>>();
+    let z02 = interpolate(a_y, a_z, c_y, c_z).collect::<Vec<_>>();
+
+    x01.pop();
+    x01.extend(x12);
+    let x012 = x01;
+
+    z01.pop();
+    z01.extend(z12);
+    let z012 = z01;
+
+    let m = (x012.len() as f64 / 2.0).floor() as usize;
+    let (x_left, x_right, z_left, z_right) = if x02[m] < x012[m] {
+        (x02, x012, z02, z012)
+    } else {
+        (x012, x02, z012, z02)
+    };
+
+    Box::new((a_y as u32..=c_y as u32).flat_map(move |y| {
+        let idx = (y - a_y as u32) as usize;
+        let x_start = x_left[idx] as u32;
+        let x_end = x_right[idx] as u32;
+
+        let z_start = z_left[idx];
+        let z_end = z_right[idx];
+        let z_step = if x_end != x_start {
+            ((z_end - z_start) / (x_end - x_start) as f64) as f32
+        } else {
+            0.0
+        };
+
+        (x_start..=x_end).enumerate().map(move |(i, x)| {
+            let z = z_start as f32 + z_step * i as f32;
+            (x, y, z)
+        })
+    }))
+}
+
+fn interpolate(i_0: f64, d_0: f64, i_1: f64, d_1: f64) -> impl Iterator<Item = f64> {
+    let a = (d_1 - d_0) / (i_1 - i_0);
+    let mut d = d_0;
+    ((i_0 as u32)..=(i_1 as u32)).map(move |_| {
+        let res = d;
+        d += a;
+        res
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use test::Bencher;
+
+    use crate::types::mesh::Triangle;
+
+    use super::{triangle_points, triangle_points_interpolation};
+
+    #[bench]
+    fn test_triangle_points(b: &mut Bencher) {
+        let (triangle, texture) = test_data();
+        b.iter(|| {
+            triangle.clone().into_iter().for_each(|triangle| {
+                let _ = triangle_points(&texture, triangle).collect::<Vec<_>>();
+            });
+        });
+    }
+
+    #[bench]
+    fn test_triangle_points_interpolate(b: &mut Bencher) {
+        let (triangle, _) = test_data();
+        b.iter(|| {
+            triangle.iter().for_each(|triangle| {
+                let _ = triangle_points_interpolation(triangle).collect::<Vec<_>>();
+            });
+        });
+    }
+
+    fn test_data() -> (Vec<Triangle>, crate::types::textures::Texture) {
+        let cube = crate::r#static::shapes::cube();
+        let matrix = crate::types::matrix::Matrix::identity();
+        (
+            crate::transform::transform_mesh(&cube, matrix).collect::<Vec<_>>(),
+            crate::types::textures::Texture::None,
+        )
+    }
+}

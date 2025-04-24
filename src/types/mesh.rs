@@ -62,8 +62,8 @@ impl Mesh {
 }
 
 pub struct TriangleIterator<'a, I: Iterator<Item = &'a (usize, usize, usize)>> {
-    vertices: &'a [Vertex],
-    indices: &'a mut I,
+    vertices: Box<[Vertex]>,
+    indices: I,
 }
 impl<'a, I: Iterator<Item = &'a (usize, usize, usize)>> Iterator for TriangleIterator<'a, I> {
     type Item = Triangle;
@@ -80,10 +80,16 @@ impl<'a, I: Iterator<Item = &'a (usize, usize, usize)>> Iterator for TriangleIte
 }
 
 impl<'a, I: Iterator<Item = &'a (usize, usize, usize)>> TriangleIterator<'a, I> {
-    pub fn new(vertices: &'a [Vertex], indices: &'a mut I) -> Self {
-        Self { vertices, indices }
+    pub fn new(
+        vertices: &[Vertex],
+        indices: impl IntoIterator<Item = &'a (usize, usize, usize), IntoIter = I>,
+    ) -> Self {
+        Self {
+            vertices: vertices.into(),
+            indices: indices.into_iter(),
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Triangle(pub Vertex, pub Vertex, pub Vertex);

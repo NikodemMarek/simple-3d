@@ -19,9 +19,9 @@ use web_sys::KeyboardEvent;
 use web_sys::MouseEvent;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
-mod rasterizing;
-mod rendering;
+mod rasterize;
 mod r#static;
+mod transform;
 mod types;
 
 const NEAR: f64 = 0.1;
@@ -65,7 +65,7 @@ pub fn start() -> Result<(), JsValue> {
     let mut camera = Camera::new(camera_properties);
     camera.r#move((0.0, 0.0, 5.0));
 
-    let textures = textures::init();
+    let textures = textures::Textures::init();
 
     let mut cube = shapes::cube();
     cube.texture = "cube".into();
@@ -237,8 +237,6 @@ fn start_animation_loop(scene: &Rc<RefCell<Scene>>) {
     let context = context();
     let scene = Rc::clone(scene);
 
-    render(&mut scene.borrow_mut(), &context);
-
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
         render(&mut scene.borrow_mut(), &context);
         request_animation_frame(f.borrow().as_ref().unwrap());
@@ -248,7 +246,22 @@ fn start_animation_loop(scene: &Rc<RefCell<Scene>>) {
 }
 
 fn render(scene: &mut Scene, context: &CanvasRenderingContext2d) {
-    rendering::render(scene);
+    scene.screen.clear_depth();
+
+    let camera_viewport_transformation =
+        scene.screen.transformation_matrix().clone() * scene.camera.transformation_matrix().clone();
+
+    let transformed = transform::transform(
+        &scene.textures,
+        &scene.objects,
+        camera_viewport_transformation,
+    );
+    for (triangles, texture) in transformed {
+        for p in rasterize::rasterize(texture, triangles) {
+            scene.screen.put_pixel(p.0, p.1, p.2);
+        }
+    }
+
     draw(&scene.screen, context);
     scene.screen.clear_buffer();
 

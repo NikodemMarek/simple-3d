@@ -4,10 +4,9 @@ use std::{
 };
 
 use wasm_bindgen::{JsCast, prelude::Closure};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{CanvasRenderingContext2d, Event, HtmlCanvasElement, ImageBitmap, KeyboardEvent};
+use web_sys::{Event, KeyboardEvent};
 
-use crate::types::{
+use simple_3d_core::types::{
     camera::{Camera, CameraProperties},
     pixel::Pixel,
     scene::Scene,
@@ -15,103 +14,7 @@ use crate::types::{
     textures::Textures,
 };
 
-fn window() -> web_sys::Window {
-    web_sys::window().expect("no global `window` exists")
-}
-
-fn document() -> web_sys::Document {
-    window()
-        .document()
-        .expect("should have a document on window")
-}
-
-fn canvas() -> HtmlCanvasElement {
-    document()
-        .get_element_by_id("canvas")
-        .unwrap()
-        .dyn_into::<HtmlCanvasElement>()
-        .unwrap()
-}
-
-fn context() -> CanvasRenderingContext2d {
-    canvas()
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()
-        .unwrap()
-}
-
-async fn fetch_image_data(url: &str) -> ImageBitmap {
-    let resp_value = window().fetch_with_str(url);
-    let resp = JsFuture::from(resp_value)
-        .await
-        .expect("Failed to fetch image data")
-        .dyn_into::<web_sys::Response>()
-        .expect("Failed to convert to Response");
-
-    if !resp.ok() {
-        panic!("Failed to fetch image data");
-    }
-
-    if !resp
-        .headers()
-        .get("Content-Type")
-        .expect("Failed to get Content-Type header")
-        .expect("Failed to get Content-Type header")
-        .starts_with("image/")
-    {
-        panic!("Invalid MIME type");
-    }
-
-    let blob = JsFuture::from(resp.blob().expect("Failed to get blob"))
-        .await
-        .expect("Failed to convert to Blob")
-        .dyn_into::<web_sys::Blob>()
-        .expect("Failed to convert to Blob");
-
-    let obj_url =
-        web_sys::Url::create_object_url_with_blob(&blob).expect("Failed to create object URL");
-
-    let promise = window()
-        .create_image_bitmap_with_blob(&blob)
-        .expect("Failed to create ImageBitmap");
-    let image_bitmap = JsFuture::from(promise)
-        .await
-        .expect("Failed to convert to ImageBitmap");
-
-    web_sys::Url::revoke_object_url(&obj_url).unwrap();
-    image_bitmap.into()
-}
-
-pub async fn load_and_process_image(url: &str) -> crate::types::textures::Image {
-    let image_bitmap = fetch_image_data(url).await;
-
-    let width = image_bitmap.width();
-    let height = image_bitmap.height();
-
-    let canvas = canvas();
-
-    canvas.set_width(width);
-    canvas.set_height(height);
-
-    context()
-        .draw_image_with_image_bitmap(&image_bitmap, 0.0, 0.0)
-        .expect("Failed to draw image");
-
-    let image_data = context()
-        .get_image_data(0.0, 0.0, width as f64, height as f64)
-        .expect("Failed to get image data");
-
-    use crate::types::pixel::Pixel;
-    let data = image_data.data().to_vec();
-    let data = data
-        .chunks_exact(4)
-        .map(|chunk| Pixel(chunk[0], chunk[1], chunk[2], chunk[3]))
-        .collect::<Box<[Pixel]>>();
-
-    crate::types::textures::Image::load(width, height, &data)
-}
+use crate::{canvas, context, window};
 
 fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
     let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
@@ -147,7 +50,7 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
 }
 
 pub struct WasmInterface;
-impl crate::Interface for WasmInterface {
+impl simple_3d_core::Interface for WasmInterface {
     fn new_scene(fov: f64, near: f64, far: f64) -> Scene {
         let (width, height) = get_display_size();
 

@@ -1,0 +1,39 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "simple-3d-wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+simple-3d-core = { version = "0.1.0", path = "../simple-3d-core" }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4.50"
+
+[dependencies.web-sys]
+version = "0.3.77"
+features = [
+  'Document',
+  'Element',
+  'HtmlCanvasElement',
+  'CanvasRenderingContext2d',
+  'ImageData',
+  'Node',
+  'Window',
+  'console',
+  'EventTarget',
+  'KeyboardEvent',
+  'MouseEvent',
+
+  'ImageBitmap',
+  'Headers',
+  'Request',
+  'RequestInit',
+  'RequestMode',
+  'Response',
+  'Blob',
+  'Url'
+]

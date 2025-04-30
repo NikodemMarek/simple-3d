@@ -1,4 +1,4 @@
-import init from "./pkg/simple_3d.js";
+import init from "./pkg/simple_3d_wasm.js";
 
 async function run() {
 	await init();

@@ -7,14 +7,13 @@ use std::cell::RefMut;
 use std::rc::Rc;
 use types::scene::Scene;
 use types::screen::Screen;
+use types::textures::Image;
 use types::vector;
-use wasm_bindgen::prelude::*;
 
 mod rasterize;
 mod r#static;
 mod transform;
-mod types;
-mod wasm;
+pub mod types;
 
 const NEAR: f64 = 0.1;
 const FAR: f64 = 100.0;
@@ -53,14 +52,14 @@ pub trait Interface {
     fn draw(screen: &Screen);
 }
 
-async fn init<I: Interface>() -> Result<(), JsValue> {
-    let image = wasm::load_and_process_image("./assets/crate.jpg").await;
-
+pub async fn init<I: Interface>(images: Box<[(String, Image)]>) -> Result<(), ()> {
     let mut scene = I::new_scene(FOV, NEAR, FAR);
 
-    scene
-        .textures
-        .add("crate", types::textures::Texture::Image { image });
+    for (name, image) in images.into_iter() {
+        scene
+            .textures
+            .add(&name, types::textures::Texture::Image { image });
+    }
 
     let mut cube = shapes::cube();
     cube.texture = "crate".into();
@@ -95,9 +94,4 @@ async fn init<I: Interface>() -> Result<(), JsValue> {
     I::start_animation_loop(scene);
 
     Ok(())
-}
-
-#[wasm_bindgen(start)]
-pub async fn start() -> Result<(), JsValue> {
-    init::<wasm::WasmInterface>().await
 }

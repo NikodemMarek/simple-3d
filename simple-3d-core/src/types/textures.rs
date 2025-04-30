@@ -71,6 +71,7 @@ impl Image {
 
     #[inline]
     pub fn get(&self, x: u32, y: u32) -> Pixel {
-        self.data[(x + y * 4) as usize]
+        let y = y * self.width;
+        self.data[(x + y) as usize]
     }
 }

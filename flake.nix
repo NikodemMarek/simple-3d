@@ -59,7 +59,7 @@
         alias-build = pkgs.writeShellScriptBin "b" ''${pkgs.cargo-watch}/bin/cargo-watch -C simple-3d-wasm -s "wasm-pack build --target web" -c'';
         alias-test = pkgs.writeShellScriptBin "t" ''${pkgs.cargo-watch}/bin/cargo-watch -x test -c'';
         alias-profile = pkgs.writeShellScriptBin "p" ''cargo bench'';
-        alias-serve = pkgs.writeShellScriptBin "s" ''${pkgs.python3}/bin/python3 -m http.server 9999'';
+        alias-serve = pkgs.writeShellScriptBin "s" ''${pkgs.python3}/bin/python3 -m http.server 9999 -d ./simple-3d-wasm'';
       in
         craneLib.devShell {
           checks = self.checks.${system};

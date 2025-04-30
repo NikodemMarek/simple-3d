@@ -36,9 +36,7 @@ pub(crate) fn context() -> CanvasRenderingContext2d {
 pub async fn start() -> Result<(), JsValue> {
     let image = load_and_process_image("./assets/crate.jpg").await;
 
-    simple_3d_core::init::<interface::WasmInterface>(Box::new([("crate".to_string(), image)]))
-        .await
-        .unwrap();
+    simple_3d_core::init::<interface::WasmInterface>(Box::new([("crate".to_string(), image)]));
 
     Ok(())
 }

@@ -52,7 +52,7 @@ pub trait Interface {
     fn draw(screen: &Screen);
 }
 
-pub async fn init<I: Interface>(images: Box<[(String, Image)]>) -> Result<(), ()> {
+pub fn init<I: Interface>(images: Box<[(String, Image)]>) {
     let mut scene = I::new_scene(FOV, NEAR, FAR);
 
     for (name, image) in images.into_iter() {
@@ -92,6 +92,4 @@ pub async fn init<I: Interface>(images: Box<[(String, Image)]>) -> Result<(), ()
     });
 
     I::start_animation_loop(scene);
-
-    Ok(())
 }

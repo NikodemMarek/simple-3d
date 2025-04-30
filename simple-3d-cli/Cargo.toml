@@ -1,0 +1,9 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "simple-3d-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+simple-3d-core = { version = "0.1.0", path = "../simple-3d-core" }

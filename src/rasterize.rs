@@ -21,12 +21,6 @@ pub fn triangle_points(
     texture: &Texture,
     triangle @ Triangle(a, b, c): Triangle,
 ) -> impl Iterator<Item = ((u32, u32), f32, Pixel)> {
-    let pixel = match texture {
-        Texture::None => Pixel::default(),
-        Texture::Solid(r, g, b, a) => Pixel(*r, *g, *b, *a),
-        Texture::Triangles(texture) => Pixel(255, 0, 0, 255),
-    };
-
     #[inline]
     fn det(a: Vector<3>, b: Vector<3>, c: Vector<3>) -> f64 {
         a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
@@ -72,6 +66,25 @@ pub fn triangle_points(
 
             let inv_z = alpha * z_a + beta * z_b + gamma * z_c;
             let z = 1.0 / inv_z;
+
+            let u_over_z =
+                alpha * (a.uv[0] * z_a) + beta * (b.uv[0] * z_b) + gamma * (c.uv[0] * z_c);
+            let v_over_z =
+                alpha * (a.uv[1] * z_a) + beta * (b.uv[1] * z_b) + gamma * (c.uv[1] * z_c);
+
+            let u = u_over_z / inv_z;
+            let v = v_over_z / inv_z;
+
+            let tex_width = texture.width() as f64;
+            let tex_height = texture.height() as f64;
+
+            let tex_x = (u.clamp(0.0, 1.0) * (tex_width - 1.0)).round() as u32;
+            let tex_y = (v.clamp(0.0, 1.0) * (tex_height - 1.0)).round() as u32;
+
+            let tex_x = tex_x.min(texture.width() - 1);
+            let tex_y = tex_y.min(texture.height() - 1);
+
+            let pixel = texture.get(tex_x, tex_y);
 
             Some(((x, y), z as f32, pixel))
         } else {

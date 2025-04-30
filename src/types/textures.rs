@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::vector::Vector;
+use super::pixel::Pixel;
 
 pub struct Textures(HashMap<Box<str>, Texture>);
 
@@ -12,70 +12,65 @@ impl Textures {
     pub fn init() -> Self {
         let mut textures = HashMap::new();
         textures.insert("none".into(), Texture::None);
-        let cube = Texture::Triangles(Box::new([
-            // FRONT (Red)
-            (
-                (((1.0, 1.0).into(), (2.0, 1.0).into(), (2.0, 2.0).into())),
-                (255, 0, 0, 255),
-            ),
-            (
-                (((1.0, 1.0).into(), (2.0, 2.0).into(), (1.0, 2.0).into())),
-                (255, 0, 0, 255),
-            ),
-            // BACK (Green)
-            (
-                (((3.0, 1.0).into(), (4.0, 1.0).into(), (4.0, 2.0).into())),
-                (0, 255, 0, 255),
-            ),
-            (
-                (((3.0, 1.0).into(), (4.0, 2.0).into(), (3.0, 2.0).into())),
-                (0, 255, 0, 255),
-            ),
-            // LEFT (Blue)
-            (
-                (((0.0, 1.0).into(), (1.0, 1.0).into(), (1.0, 2.0).into())),
-                (0, 0, 255, 255),
-            ),
-            (
-                (((0.0, 1.0).into(), (1.0, 2.0).into(), (0.0, 2.0).into())),
-                (0, 0, 255, 255),
-            ),
-            // RIGHT (Yellow)
-            (
-                (((2.0, 1.0).into(), (3.0, 1.0).into(), (3.0, 2.0).into())),
-                (255, 255, 0, 255),
-            ),
-            (
-                (((2.0, 1.0).into(), (3.0, 2.0).into(), (2.0, 2.0).into())),
-                (255, 255, 0, 255),
-            ),
-            // TOP (Magenta)
-            (
-                (((1.0, 2.0).into(), (2.0, 2.0).into(), (2.0, 3.0).into())),
-                (255, 0, 255, 255),
-            ),
-            (
-                (((1.0, 2.0).into(), (2.0, 3.0).into(), (1.0, 3.0).into())),
-                (255, 0, 255, 255),
-            ),
-            // BOTTOM (Cyan)
-            (
-                (((1.0, 0.0).into(), (2.0, 0.0).into(), (2.0, 1.0).into())),
-                (0, 255, 255, 255),
-            ),
-            (
-                (((1.0, 0.0).into(), (2.0, 1.0).into(), (1.0, 1.0).into())),
-                (0, 255, 255, 255),
-            ),
-        ]));
-        textures.insert("cube".into(), cube);
+
         Self(textures)
+    }
+
+    pub fn add(&mut self, name: &str, texture: Texture) {
+        self.0.insert(name.into(), texture);
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Texture {
     None,
     Solid(u8, u8, u8, u8),
-    Triangles(Box<[((Vector<2>, Vector<2>, Vector<2>), (u8, u8, u8, u8))]>),
+    Image { image: Image },
+}
+
+impl Texture {
+    pub fn get(&self, x: u32, y: u32) -> Pixel {
+        match self {
+            Texture::None => Pixel::default(),
+            Texture::Solid(r, g, b, a) => Pixel(*r, *g, *b, *a),
+            Texture::Image { image } => image.get(x, y),
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        match self {
+            Texture::None => 1,
+            Texture::Solid(_, _, _, _) => 1,
+            Texture::Image { image } => image.width,
+        }
+    }
+    pub fn height(&self) -> u32 {
+        match self {
+            Texture::None => 1,
+            Texture::Solid(_, _, _, _) => 1,
+            Texture::Image { image } => image.height,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Image {
+    data: Box<[Pixel]>,
+    width: u32,
+    height: u32,
+}
+
+impl Image {
+    pub fn load(width: u32, height: u32, data: &[Pixel]) -> Self {
+        Self {
+            data: data.into(),
+            width,
+            height,
+        }
+    }
+
+    #[inline]
+    pub fn get(&self, x: u32, y: u32) -> Pixel {
+        self.data[(x + y * 4) as usize]
+    }
 }

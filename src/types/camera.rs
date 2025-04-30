@@ -83,6 +83,9 @@ impl Camera {
     pub fn radius(&self) -> f64 {
         (self.position - self.target).magnitude()
     }
+    pub fn properties(&self) -> &CameraProperties {
+        &self.properties
+    }
 
     pub fn r#move(&mut self, vector: impl Into<Vector<3>>) {
         self.position += vector.into();
@@ -105,16 +108,30 @@ impl Camera {
 }
 
 #[derive(Debug, Clone)]
-pub struct CameraProperties(Matrix<4, 4>);
+pub struct CameraProperties {
+    fov: f64,
+    aspect_ratio: f64,
+    near: f64,
+    far: f64,
+
+    trasformation: Matrix<4, 4>,
+}
 
 impl CameraProperties {
     pub fn new(fov: f64, aspect_ratio: f64, near: f64, far: f64) -> Self {
-        Self(Self::calculate_projection_matrix(
+        Self {
             fov,
             aspect_ratio,
             near,
             far,
-        ))
+            trasformation: Self::calculate_projection_matrix(fov, aspect_ratio, near, far),
+        }
+    }
+    pub fn inherit(
+        CameraProperties { fov, near, far, .. }: CameraProperties,
+        aspect_ratio: f64,
+    ) -> Self {
+        Self::new(fov, aspect_ratio, near, far)
     }
 
     fn calculate_projection_matrix(
@@ -140,6 +157,6 @@ impl CameraProperties {
 
     #[inline]
     fn transformation_matrix(&self) -> &Matrix<4, 4> {
-        &self.0
+        &self.trasformation
     }
 }

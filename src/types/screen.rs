@@ -70,18 +70,18 @@ mod tests {
         let mut screen = Screen::new(10, 10);
 
         let pixel = Pixel(255, 0, 0, 255);
-        screen.put_pixel((5, 5, 0.5), pixel);
+        screen.put_pixel((5, 5), 0.5, pixel);
         assert_eq!(screen.buffer[5 + 5 * 10], pixel);
 
-        screen.put_pixel((5, 5, 0.6), Pixel(0, 255, 128, 255));
+        screen.put_pixel((5, 5), 0.6, Pixel(0, 255, 128, 255));
         assert_eq!(screen.buffer[5 + 5 * 10], pixel);
 
         let pixel = Pixel(64, 255, 0, 255);
-        screen.put_pixel((5, 5, 0.4), pixel);
+        screen.put_pixel((5, 5), 0.4, pixel);
         assert_eq!(screen.buffer[5 + 5 * 10], pixel);
 
         let second_pixel = Pixel(64, 255, 0, 255);
-        screen.put_pixel((4, 6, 0.3), second_pixel);
+        screen.put_pixel((4, 6), 0.3, second_pixel);
         assert_eq!(screen.buffer[5 + 5 * 10], pixel);
         assert_eq!(screen.buffer[4 + 6 * 10], second_pixel);
     }

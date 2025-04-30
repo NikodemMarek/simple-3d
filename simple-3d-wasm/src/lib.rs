@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap};
 
-mod wasm;
+mod interface;
 
 pub(crate) fn window() -> web_sys::Window {
     web_sys::window().expect("no global `window` exists")
@@ -36,7 +36,7 @@ pub(crate) fn context() -> CanvasRenderingContext2d {
 pub async fn start() -> Result<(), JsValue> {
     let image = load_and_process_image("./assets/crate.jpg").await;
 
-    simple_3d_core::init::<wasm::WasmInterface>(Box::new([("crate".to_string(), image)]))
+    simple_3d_core::init::<interface::WasmInterface>(Box::new([("crate".to_string(), image)]))
         .await
         .unwrap();
 

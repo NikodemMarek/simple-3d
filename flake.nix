@@ -28,8 +28,8 @@
           targets = ["wasm32-unknown-unknown"];
         });
 
-      simple-3d = craneLib.buildPackage {
-        src = craneLib.cleanCargoSource ./.;
+      simple-3d-wasm = craneLib.buildPackage {
+        src = craneLib.cleanCargoSource ./simple-3d-wasm;
         strictDeps = true;
         cargoExtraArgs = "--target wasm32-unknown-unknown";
 
@@ -44,14 +44,14 @@
       };
     in {
       checks = {
-        inherit simple-3d;
+        inherit simple-3d-wasm;
       };
 
-      packages.default = simple-3d;
+      packages.default = simple-3d-wasm;
 
       apps.default = flake-utils.lib.mkApp {
-        drv = pkgs.writeShellScriptBin "simple-3d" ''
-          ${pkgs.wasmtime}/bin/wasmtime run ${simple-3d}/bin/custom-toolchain.wasm
+        drv = pkgs.writeShellScriptBin "simple-3d-wasm" ''
+          ${pkgs.wasmtime}/bin/wasmtime run ${simple-3d-wasm}/bin/custom-toolchain.wasm
         '';
       };
 

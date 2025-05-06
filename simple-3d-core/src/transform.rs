@@ -2,21 +2,16 @@ use std::slice::Iter;
 
 use crate::types::{
     matrix::Matrix,
-    mesh::{Mesh, TriangleIterator},
+    mesh::{Indice, Mesh},
     textures::{Texture, Textures},
-    vertex,
+    triangle::{self, TriangleIterator},
 };
 
 pub fn transform<'a>(
     textures: &'a Textures,
     objects: &'a [Mesh],
     camera_viewport_transformation: Matrix<4, 4>,
-) -> impl Iterator<
-    Item = (
-        TriangleIterator<'a, Iter<'a, (usize, usize, usize)>>,
-        &'a Texture,
-    ),
-> + 'a {
+) -> impl Iterator<Item = (TriangleIterator<'a, Iter<'a, Indice>>, &'a Texture)> + 'a {
     objects.iter().map(move |mesh| {
         let matrix = camera_viewport_transformation.clone() * mesh.transformation_matrix().clone();
 
@@ -27,11 +22,14 @@ pub fn transform<'a>(
 
 pub fn transform_mesh<'a>(
     Mesh {
-        vertices, indices, ..
+        vertices,
+        indices,
+        uvs,
+        ..
     }: &'a Mesh,
     matrix: Matrix<4, 4>,
-) -> TriangleIterator<'a, Iter<'a, (usize, usize, usize)>> {
+) -> TriangleIterator<'a, Iter<'a, Indice>> {
     let transformed_vertices =
-        vertex::transform(&matrix, vertices.iter().copied()).collect::<Vec<_>>();
-    TriangleIterator::new(&transformed_vertices, indices)
+        triangle::transform(&matrix, vertices.iter().copied()).collect::<Vec<_>>();
+    TriangleIterator::new(&transformed_vertices, uvs, indices)
 }

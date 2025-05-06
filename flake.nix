@@ -56,14 +56,15 @@
       };
 
       devShells.default = let
-        alias-build = pkgs.writeShellScriptBin "b" ''${pkgs.cargo-watch}/bin/cargo-watch -C simple-3d-wasm -s "wasm-pack build --target web" -c'';
+        alias-build-wasm = pkgs.writeShellScriptBin "bw" ''${pkgs.cargo-watch}/bin/cargo-watch -C simple-3d-wasm -s "wasm-pack build --target web" -c'';
+        alias-build-cli = pkgs.writeShellScriptBin "bc" ''${pkgs.cargo-watch}/bin/cargo-watch -C simple-3d-cli -x run -c'';
         alias-test = pkgs.writeShellScriptBin "t" ''${pkgs.cargo-watch}/bin/cargo-watch -x test -c'';
         alias-profile = pkgs.writeShellScriptBin "p" ''cargo bench'';
         alias-serve = pkgs.writeShellScriptBin "s" ''${pkgs.python3}/bin/python3 -m http.server 9999 -d ./simple-3d-wasm'';
       in
         craneLib.devShell {
           checks = self.checks.${system};
-          buildInputs = [alias-build alias-test alias-profile alias-serve];
+          buildInputs = [alias-build-wasm alias-build-cli alias-test alias-profile alias-serve];
           packages = [];
         };
     });

@@ -34,6 +34,11 @@ impl Vector<3> {
         ]
         .into()
     }
+
+    pub fn transformed(&self, transformation: &super::matrix::Matrix<4, 4>) -> Self {
+        let v = transformation.dot(&self.homogenous());
+        (v[0] / v[3], v[1] / v[3], v[2] / v[3]).into()
+    }
 }
 
 impl<const S: usize> std::ops::Index<usize> for Vector<S> {

@@ -5,5 +5,5 @@ pub mod pixel;
 pub mod scene;
 pub mod screen;
 pub mod textures;
+pub mod triangle;
 pub mod vector;
-pub mod vertex;

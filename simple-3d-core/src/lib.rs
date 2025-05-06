@@ -1,18 +1,20 @@
 #![feature(test)]
 extern crate test;
 
-use r#static::shapes;
+pub use loader::load_obj;
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;
+use types::mesh::Mesh;
 use types::scene::Scene;
 use types::screen::Screen;
 use types::textures::Image;
 use types::vector;
 
+mod loader;
 mod rasterize;
-mod r#static;
 mod transform;
+mod transformations;
 pub mod types;
 
 const NEAR: f64 = 0.1;
@@ -52,18 +54,18 @@ pub trait Interface {
     fn draw(screen: &Screen);
 }
 
-pub fn init<I: Interface>(images: Box<[(String, Image)]>) {
+pub fn init<I: Interface>(objects: Box<[Mesh]>, images: Box<[(String, Image)]>) {
     let mut scene = I::new_scene(FOV, NEAR, FAR);
+
+    for object in objects.into_iter() {
+        scene.objects.push(object);
+    }
 
     for (name, image) in images.into_iter() {
         scene
             .textures
             .add(&name, types::textures::Texture::Image { image });
     }
-
-    let mut cube = shapes::cube();
-    cube.texture = "crate".into();
-    scene.objects.push(cube);
 
     scene.camera.r#move((0.0, 0.0, 5.0));
 

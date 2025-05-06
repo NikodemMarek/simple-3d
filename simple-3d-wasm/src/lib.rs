@@ -1,4 +1,7 @@
-use simple_3d_core::types::{pixel::Pixel, textures::Image};
+use simple_3d_core::{
+    load_obj,
+    types::{pixel::Pixel, textures::Image},
+};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap};
@@ -35,8 +38,12 @@ pub(crate) fn context() -> CanvasRenderingContext2d {
 #[wasm_bindgen(start)]
 pub async fn start() -> Result<(), JsValue> {
     let image = load_and_process_image("./assets/crate.jpg").await;
+    let mesh = load_obj(&fetch_binary_data("./assets/cube.obj").await);
 
-    simple_3d_core::init::<interface::WasmInterface>(Box::new([("crate".to_string(), image)]));
+    simple_3d_core::init::<interface::WasmInterface>(
+        Box::new([mesh]),
+        Box::new([("crate.jpg".to_string(), image)]),
+    );
 
     Ok(())
 }
@@ -109,4 +116,36 @@ async fn fetch_image_data(url: &str) -> ImageBitmap {
 
     web_sys::Url::revoke_object_url(&obj_url).unwrap();
     image_bitmap.into()
+}
+
+async fn fetch_binary_data(url: &str) -> Box<[u8]> {
+    let resp_value = window().fetch_with_str(url);
+    let resp = JsFuture::from(resp_value)
+        .await
+        .expect("Failed to fetch data")
+        .dyn_into::<web_sys::Response>()
+        .expect("Failed to convert to Response");
+
+    if !resp.ok() {
+        panic!("Failed to fetch data");
+    }
+
+    let blob_promise = resp.blob().expect("Failed to get blob");
+    let blob = JsFuture::from(blob_promise)
+        .await
+        .expect("Failed to convert to Blob")
+        .dyn_into::<web_sys::Blob>()
+        .expect("Failed to convert to Blob");
+
+    let array_buffer_promise = blob.array_buffer();
+    let array_buffer = JsFuture::from(array_buffer_promise)
+        .await
+        .expect("Failed to get ArrayBuffer");
+
+    let uint8_array = web_sys::js_sys::Uint8Array::new(&array_buffer);
+
+    let mut vec = vec![0; uint8_array.length() as usize];
+    uint8_array.copy_to(&mut vec[..]);
+
+    vec.into()
 }

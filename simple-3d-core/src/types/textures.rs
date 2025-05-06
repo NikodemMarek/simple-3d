@@ -12,6 +12,7 @@ impl Textures {
     pub fn init() -> Self {
         let mut textures = HashMap::new();
         textures.insert("none".into(), Texture::None);
+        textures.insert("solid_red".into(), Texture::Solid(255, 0, 0, 255));
 
         Self(textures)
     }

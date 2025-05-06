@@ -1,8 +1,9 @@
 use crate::{
     types::{
-        mesh::{Triangle, TriangleIterator},
+        mesh::Indice,
         pixel::Pixel,
         textures::Texture,
+        triangle::{Triangle, TriangleIterator},
     },
     vector::Vector,
 };
@@ -12,7 +13,7 @@ pub fn rasterize<'a, I>(
     triangles: TriangleIterator<'a, I>,
 ) -> impl Iterator<Item = ((u32, u32), f32, Pixel)>
 where
-    I: Iterator<Item = &'a (usize, usize, usize)>,
+    I: Iterator<Item = &'a Indice>,
 {
     triangles.flat_map(|triangle| triangle_points(texture, triangle))
 }
@@ -91,119 +92,4 @@ pub fn triangle_points(
             None
         }
     })
-}
-
-pub fn triangle_points_interpolation<'a>(
-    Triangle(a, b, c): &'a Triangle,
-) -> Box<dyn Iterator<Item = (u32, u32, f32)> + 'a> {
-    let [mut a_x, mut a_y, mut a_z] = *a.position;
-    let [mut b_x, mut b_y, mut b_z] = *b.position;
-    let [mut c_x, mut c_y, mut c_z] = *c.position;
-
-    if b_y < a_y {
-        std::mem::swap(&mut a_x, &mut b_x);
-        std::mem::swap(&mut a_y, &mut b_y);
-        std::mem::swap(&mut a_z, &mut b_z);
-    }
-    if c_y < a_y {
-        std::mem::swap(&mut a_x, &mut c_x);
-        std::mem::swap(&mut a_y, &mut c_y);
-        std::mem::swap(&mut a_z, &mut c_z);
-    }
-    if c_y < b_y {
-        std::mem::swap(&mut b_x, &mut c_x);
-        std::mem::swap(&mut b_y, &mut c_y);
-        std::mem::swap(&mut b_z, &mut c_z);
-    }
-
-    let mut x01 = interpolate(a_y, a_x, b_y, b_x).collect::<Vec<_>>();
-    let mut z01 = interpolate(a_y, a_z, b_y, b_z).collect::<Vec<_>>();
-
-    let x12 = interpolate(b_y, b_x, c_y, c_x).collect::<Vec<_>>();
-    let z12 = interpolate(b_y, b_z, c_y, c_z).collect::<Vec<_>>();
-
-    let x02 = interpolate(a_y, a_x, c_y, c_x).collect::<Vec<_>>();
-    let z02 = interpolate(a_y, a_z, c_y, c_z).collect::<Vec<_>>();
-
-    x01.pop();
-    x01.extend(x12);
-    let x012 = x01;
-
-    z01.pop();
-    z01.extend(z12);
-    let z012 = z01;
-
-    let m = (x012.len() as f64 / 2.0).floor() as usize;
-    let (x_left, x_right, z_left, z_right) = if x02[m] < x012[m] {
-        (x02, x012, z02, z012)
-    } else {
-        (x012, x02, z012, z02)
-    };
-
-    Box::new((a_y as u32..=c_y as u32).flat_map(move |y| {
-        let idx = (y - a_y as u32) as usize;
-        let x_start = x_left[idx] as u32;
-        let x_end = x_right[idx] as u32;
-
-        let z_start = z_left[idx];
-        let z_end = z_right[idx];
-        let z_step = if x_end != x_start {
-            ((z_end - z_start) / (x_end - x_start) as f64) as f32
-        } else {
-            0.0
-        };
-
-        (x_start..=x_end).enumerate().map(move |(i, x)| {
-            let z = z_start as f32 + z_step * i as f32;
-            (x, y, z)
-        })
-    }))
-}
-
-fn interpolate(i_0: f64, d_0: f64, i_1: f64, d_1: f64) -> impl Iterator<Item = f64> {
-    let a = (d_1 - d_0) / (i_1 - i_0);
-    let mut d = d_0;
-    ((i_0 as u32)..=(i_1 as u32)).map(move |_| {
-        let res = d;
-        d += a;
-        res
-    })
-}
-
-#[cfg(test)]
-mod test {
-    use test::Bencher;
-
-    use crate::types::mesh::Triangle;
-
-    use super::{triangle_points, triangle_points_interpolation};
-
-    #[bench]
-    fn test_triangle_points(b: &mut Bencher) {
-        let (triangle, texture) = test_data();
-        b.iter(|| {
-            triangle.clone().into_iter().for_each(|triangle| {
-                let _ = triangle_points(&texture, triangle).collect::<Vec<_>>();
-            });
-        });
-    }
-
-    #[bench]
-    fn test_triangle_points_interpolate(b: &mut Bencher) {
-        let (triangle, _) = test_data();
-        b.iter(|| {
-            triangle.iter().for_each(|triangle| {
-                let _ = triangle_points_interpolation(triangle).collect::<Vec<_>>();
-            });
-        });
-    }
-
-    fn test_data() -> (Vec<Triangle>, crate::types::textures::Texture) {
-        let cube = crate::r#static::shapes::cube();
-        let matrix = crate::types::matrix::Matrix::identity();
-        (
-            crate::transform::transform_mesh(&cube, matrix).collect::<Vec<_>>(),
-            crate::types::textures::Texture::None,
-        )
-    }
 }

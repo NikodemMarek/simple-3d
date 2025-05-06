@@ -1,5 +1,7 @@
 use crate::types::{
     mesh::{Indice, Mesh},
+    pixel::Pixel,
+    textures::Image,
     vector::Vector,
 };
 
@@ -47,4 +49,15 @@ pub fn load_obj(data: &[u8]) -> Mesh {
     }
 
     Mesh::new(vertices, uvs, &indices, texture.into())
+}
+
+pub fn load_image(data: &[u8]) -> Image {
+    use image::{GenericImageView, load_from_memory};
+
+    let image = load_from_memory(data).unwrap();
+    let pixels = image
+        .pixels()
+        .map(|(_, _, rgba)| rgba.into())
+        .collect::<Box<[Pixel]>>();
+    Image::load(image.width() as u32, image.height() as u32, &pixels)
 }

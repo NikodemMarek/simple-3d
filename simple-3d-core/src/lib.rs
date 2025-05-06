@@ -1,7 +1,7 @@
 #![feature(test)]
 extern crate test;
 
-pub use loader::load_obj;
+pub use loader::{load_image, load_obj};
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::Rc;

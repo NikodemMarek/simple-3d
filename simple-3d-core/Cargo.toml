@@ -7,3 +7,4 @@ edition = "2024"
 
 [dependencies]
 approx = "0.5.1"
+image = "0.25.6"

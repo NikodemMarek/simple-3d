@@ -1,15 +1,12 @@
 use std::io::Read;
 
-use simple_3d_core::{
-    load_obj,
-    types::{pixel::Pixel, textures::Image},
-};
+use simple_3d_core::{load_image, load_obj};
 
 mod interface;
 
 fn main() {
-    let image = Image::load(100, 100, &[Pixel(255, 0, 0, 255); 100 * 100]);
     let object = load_obj(&load_binary_asset("cube.obj"));
+    let image = load_image(&load_binary_asset("crate.jpg"));
 
     simple_3d_core::init::<interface::CliInterface>(
         Box::new([object]),

@@ -44,16 +44,16 @@
       };
     in {
       checks = {
-        inherit simple-3d-wasm;
+        # inherit simple-3d-wasm;
       };
 
-      packages.default = simple-3d-wasm;
-
-      apps.default = flake-utils.lib.mkApp {
-        drv = pkgs.writeShellScriptBin "simple-3d-wasm" ''
-          ${pkgs.wasmtime}/bin/wasmtime run ${simple-3d-wasm}/bin/custom-toolchain.wasm
-        '';
-      };
+      # packages.default = simple-3d-wasm;
+      #
+      # apps.default = flake-utils.lib.mkApp {
+      #   drv = pkgs.writeShellScriptBin "simple-3d-wasm" ''
+      #     ${pkgs.wasmtime}/bin/wasmtime run ${simple-3d-wasm}/bin/custom-toolchain.wasm
+      #   '';
+      # };
 
       devShells.default = let
         alias-build-wasm = pkgs.writeShellScriptBin "bw" ''${pkgs.cargo-watch}/bin/cargo-watch -C simple-3d-wasm -s "wasm-pack build --target web" -c'';

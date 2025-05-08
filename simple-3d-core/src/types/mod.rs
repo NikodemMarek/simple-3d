@@ -2,7 +2,6 @@ pub mod camera;
 pub mod matrix;
 pub mod mesh;
 pub mod pixel;
-pub mod scene;
 pub mod screen;
 pub mod textures;
 pub mod triangle;

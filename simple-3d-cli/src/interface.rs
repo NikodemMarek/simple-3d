@@ -1,57 +1,34 @@
-use std::{
-    cell::{RefCell, RefMut},
-    rc::Rc,
-    thread::sleep,
-};
+use std::thread::{self, sleep};
 
-use simple_3d_core::types::{
-    camera::{Camera, CameraProperties},
-    scene::Scene,
-    screen::Screen,
-    textures::Textures,
-};
+use simple_3d_core::types::screen::Screen;
 
 pub struct CliInterface;
 impl simple_3d_core::Interface for CliInterface {
-    fn new_scene(fov: f64, near: f64, far: f64) -> simple_3d_core::types::scene::Scene {
-        let (width, height) = get_terminal_size();
-
-        let camera_properties = CameraProperties::new(fov, width as f64 / height as f64, near, far);
-        let camera = Camera::new(camera_properties);
-        let screen = Screen::new(width, height);
-
-        Scene {
-            screen,
-            camera,
-            textures: Textures::init(),
-            objects: Vec::from([]),
-        }
+    fn get_screen_size() -> (u32, u32) {
+        let (width, height) = (100, 100);
+        (width, height)
     }
 
-    fn handle_resize(scene: Rc<RefCell<Scene>>) {}
-
-    fn register_timer<C: Fn(RefMut<Scene>) + 'static>(
-        interval: i32,
-        scene: Rc<RefCell<Scene>>,
-        closure: C,
-    ) {
+    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) {
+        // TODO: Listen for terminal size changes
+        let (width, height) = Self::get_screen_size();
+        on_resize(width, height);
     }
 
-    fn on_key_hold<C: Fn(RefMut<Scene>, String) + 'static>(scene: Rc<RefCell<Scene>>, closure: C) {}
+    fn register_timer<C: FnMut() + Send + 'static>(interval: i32, mut on_tick: C) {
+        thread::spawn(move || {
+            loop {
+                sleep(std::time::Duration::from_millis(interval as u64));
+                on_tick();
+            }
+        });
+    }
 
-    fn start_animation_loop(scene: Rc<RefCell<Scene>>) {
-        println!("Rendering frame");
+    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C) {}
 
-        sleep(std::time::Duration::from_millis(100));
-
-        Self::process(&mut scene.borrow_mut());
-        Self::draw(&scene.borrow().screen);
+    fn start<C: FnMut() + Send + 'static>(on_frame: C) {
+        Self::register_timer(20, on_frame);
     }
 
     fn draw(screen: &Screen) {}
-}
-
-fn get_terminal_size() -> (u32, u32) {
-    let (width, height) = (100, 100);
-    (width, height)
 }

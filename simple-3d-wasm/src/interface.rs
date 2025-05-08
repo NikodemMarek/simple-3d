@@ -1,22 +1,13 @@
-use std::{
-    cell::{RefCell, RefMut},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Event, KeyboardEvent};
 
-use simple_3d_core::types::{
-    camera::{Camera, CameraProperties},
-    pixel::Pixel,
-    scene::Scene,
-    screen::Screen,
-    textures::Textures,
-};
+use simple_3d_core::types::{pixel::Pixel, screen::Screen};
 
 use crate::{canvas, context, window};
 
-fn register_timer<C: Fn() + 'static>(interval: i32, closure: C) {
+fn register_timer<C: FnMut() + 'static>(interval: i32, closure: C) {
     let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
 
     window()
@@ -51,63 +42,48 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
 
 pub struct WasmInterface;
 impl simple_3d_core::Interface for WasmInterface {
-    fn new_scene(fov: f64, near: f64, far: f64) -> Scene {
-        let (width, height) = get_display_size();
-
-        let camera_properties = CameraProperties::new(fov, width as f64 / height as f64, near, far);
-        let camera = Camera::new(camera_properties);
-        let (camera, screen) = resize_screen(width, height, camera);
-
-        Scene {
-            screen,
-            camera,
-            textures: Textures::init(),
-            objects: Vec::from([]),
-        }
+    fn get_screen_size() -> (u32, u32) {
+        let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
+        let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
+        (width, height)
     }
 
-    fn handle_resize(scene: Rc<RefCell<Scene>>) {
+    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) {
         register_event_listener("resize", move |_: Event| {
-            let (width, height) = get_display_size();
-            let (camera, screen) = resize_screen(width, height, scene.borrow().camera.clone());
+            let (width, height) = Self::get_screen_size();
+            resize_screen(width, height);
 
-            scene.borrow_mut().camera = camera;
-            scene.borrow_mut().screen = screen;
+            on_resize(width, height);
         });
     }
 
-    fn register_timer<C: Fn(RefMut<Scene>) + 'static>(
-        interval: i32,
-        scene: Rc<RefCell<Scene>>,
-        closure: C,
-    ) {
-        register_timer(interval, move || {
-            closure(scene.borrow_mut());
-        });
+    fn register_timer<C: FnMut() + 'static>(interval: i32, mut on_tick: C) {
+        register_timer(interval, on_tick);
     }
 
-    fn on_key_hold<C: Fn(RefMut<Scene>, String) + 'static>(scene: Rc<RefCell<Scene>>, closure: C) {
+    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C) {
+        let key = key.to_owned();
         register_event_listener("keydown", move |event: KeyboardEvent| {
-            let key = event.key();
-            web_sys::console::log_1(&format!("Key held: {}", key).into());
-
-            let scene = scene.borrow_mut();
-            closure(scene, key.clone());
+            if key == event.key() {
+                on_hold();
+            }
         });
     }
 
-    fn start_animation_loop(scene: Rc<RefCell<Scene>>) {
+    fn start<C: FnMut() + Send + 'static>(mut on_frame: C) {
+        let (width, height) = Self::get_screen_size();
+        resize_screen(width, height);
+
         let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
         let g = Rc::clone(&f);
 
-        *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        *g.borrow_mut() = Some(Closure::new(move || {
             web_sys::console::log_1(&"Rendering frame".into());
 
-            Self::process(&mut scene.borrow_mut());
-            Self::draw(&scene.borrow().screen);
+            on_frame();
 
             request_animation_frame(f.borrow().as_ref().unwrap());
-        }) as Box<dyn FnMut()>));
+        }));
 
         request_animation_frame(g.borrow().as_ref().unwrap());
     }
@@ -184,23 +160,12 @@ impl simple_3d_core::Interface for WasmInterface {
     // }
 }
 
-fn resize_screen(width: u32, height: u32, camera: Camera) -> (Camera, Screen) {
+fn resize_screen(width: u32, height: u32) -> Screen {
     let canvas = canvas();
     canvas.set_width(width);
     canvas.set_height(height);
 
-    let screen = Screen::new(width, height);
-    let camera_properties =
-        CameraProperties::inherit(camera.properties().to_owned(), width as f64 / height as f64);
-    let camera = Camera::inherit(camera, camera_properties);
-
-    (camera, screen)
-}
-
-fn get_display_size() -> (u32, u32) {
-    let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
-    let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
-    (width, height)
+    Screen::new(width, height)
 }
 
 fn mk_image_data(screen: &Screen) -> web_sys::ImageData {

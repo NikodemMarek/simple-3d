@@ -40,7 +40,7 @@ pub struct App<I: Interface> {
     _i: std::marker::PhantomData<I>,
 }
 
-impl<I: Interface> App<I> {
+impl<'a, I: Interface + 'a> App<I> {
     fn new() -> Self {
         let event_bus = channel::<Action>();
         Self {
@@ -65,30 +65,30 @@ impl<I: Interface> App<I> {
         self.event_bus.0.clone()
     }
 
-    fn handle_resize(&self) {
+    fn handle_resize(&self) -> impl Guard + 'a {
         let sender = self.sender();
         I::handle_resize(move |width, height| {
             let _ = sender.send(Action::Resize(width, height));
-        });
+        })
     }
-    fn register_timer(&mut self, interval: i32, action: Action) {
+    fn register_timer(&self, interval: i32, action: Action) -> impl Guard + 'a {
         let sender = self.sender();
         I::register_timer(interval, move || {
             let _ = sender.send(action.clone());
-        });
+        })
     }
-    fn on_key_hold(&mut self, key: &str, action: Action) {
+    fn on_key_hold(&self, key: &'a str, action: Action) -> impl Guard + 'a {
         let sender = self.sender();
         I::handle_key_hold(key, move || {
             let _ = sender.send(action.clone());
-        });
+        })
     }
-    fn start_animation_loop(
+    fn start(
         self,
         mut screen: Screen,
         mut camera: Camera,
         textures: RefCell<Textures>,
-    ) {
+    ) -> impl Guard {
         let mut objects = Vec::new();
         I::start(move || {
             for action in self.event_bus.1.try_iter() {
@@ -132,17 +132,17 @@ impl<I: Interface> App<I> {
             }
 
             I::draw(&screen);
-        });
+        })
     }
 }
 
 pub trait Interface {
     fn get_screen_size() -> (u32, u32);
 
-    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C);
-    fn register_timer<C: FnMut() + Send + 'static>(interval: i32, on_tick: C);
-    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C);
-    fn start<C: FnMut() + Send + 'static>(on_frame: C);
+    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) -> impl Guard;
+    fn register_timer<C: FnMut() + Send + 'static>(interval: i32, on_tick: C) -> impl Guard;
+    fn handle_key_hold<C: Fn() + Send + 'static>(key: &str, on_hold: C) -> impl Guard;
+    fn start<C: FnMut() + Send + 'static>(on_frame: C) -> impl Guard;
 
     fn draw(screen: &Screen);
 }
@@ -155,7 +155,10 @@ fn setup_screen<I: Interface>() -> (Screen, Camera) {
     (screen, camera)
 }
 
-pub fn init<I: Interface + 'static>(objects: Box<[Mesh]>, images: Box<[(String, Image)]>) {
+pub fn init<'a, I: Interface + 'a + 'static>(
+    objects: Box<[Mesh]>,
+    images: Box<[(String, Image)]>,
+) -> impl Guard + 'a {
     let mut textures = Textures::init();
     for (name, image) in images.into_iter() {
         textures.add(&name, types::textures::Texture::Image { image });
@@ -170,15 +173,23 @@ pub fn init<I: Interface + 'static>(objects: Box<[Mesh]>, images: Box<[(String, 
 
     interface.move_camera((0.0, 0.0, 5.0).into());
 
-    interface.handle_resize();
+    let _resize_guard = interface.handle_resize();
 
-    interface.register_timer(50, Action::RotateObject(0, (0.01, 0.02, 0.03).into()));
+    let _timer_guard =
+        interface.register_timer(50, Action::RotateObject(0, (0.01, 0.02, 0.03).into()));
 
-    interface.on_key_hold("ArrowUp", Action::MoveCamera((0.0, 0.1, 0.0).into()));
-    interface.on_key_hold("ArrowDown", Action::MoveCamera((0.0, -0.1, 0.0).into()));
-    interface.on_key_hold("ArrowLeft", Action::MoveCamera((-0.1, 0.0, 0.0).into()));
-    interface.on_key_hold("ArrowRight", Action::MoveCamera((0.1, 0.0, 0.0).into()));
+    let _key_guards = [
+        interface.on_key_hold("ArrowUp", Action::MoveCamera((0.0, 0.1, 0.0).into())),
+        interface.on_key_hold("ArrowDown", Action::MoveCamera((0.0, -0.1, 0.0).into())),
+        interface.on_key_hold("ArrowLeft", Action::MoveCamera((-0.1, 0.0, 0.0).into())),
+        interface.on_key_hold("ArrowRight", Action::MoveCamera((0.1, 0.0, 0.0).into())),
+    ];
 
     let (screen, camera) = setup_screen::<I>();
-    interface.start_animation_loop(screen, camera, textures);
+    interface.start(screen, camera, textures)
+}
+
+pub trait Guard {
+    fn is_finished(&self) -> bool;
+    fn stop(self);
 }

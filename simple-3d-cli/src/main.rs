@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use simple_3d_core::{load_image, load_obj};
+use simple_3d_core::{Guard, load_image, load_obj};
 
 mod interface;
 
@@ -8,10 +8,16 @@ fn main() {
     let object = load_obj(&load_binary_asset("cube.obj"));
     let image = load_image(&load_binary_asset("crate.jpg"));
 
-    simple_3d_core::init::<interface::CliInterface>(
+    let guard = simple_3d_core::init::<interface::CliInterface>(
         Box::new([object]),
         Box::new([("crate.jpg".to_string(), image)]),
     );
+
+    loop {
+        if guard.is_finished() {
+            break;
+        }
+    }
 }
 
 fn load_binary_asset(path: &str) -> Vec<u8> {

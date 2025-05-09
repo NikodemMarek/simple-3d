@@ -3,23 +3,26 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::{Event, KeyboardEvent};
 
-use simple_3d_core::types::{pixel::Pixel, screen::Screen};
+use simple_3d_core::{
+    Guard,
+    types::{pixel::Pixel, screen::Screen},
+};
 
 use crate::{canvas, context, window};
 
-fn register_timer<C: FnMut() + 'static>(interval: i32, closure: C) {
+fn register_timer<C: FnMut() + 'static>(interval: i32, closure: C) -> impl Guard {
     let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
 
-    window()
+    let handle = window()
         .set_interval_with_callback_and_timeout_and_arguments_0(
             closure.as_ref().unchecked_ref(),
             interval,
         )
         .unwrap();
-    closure.forget(); // Keep it alive
+    WasmTimerGuard(handle)
 }
 
-fn register_event_listener<E, C>(event: &str, closure: C)
+fn register_event_listener<E, C>(event: &str, closure: C) -> impl Guard
 where
     E: JsCast + 'static,
     C: Fn(E) + 'static,
@@ -28,10 +31,11 @@ where
         closure(e.dyn_into::<E>().unwrap());
     }) as Box<dyn FnMut(_)>);
 
+    let guard = WasmEventGuard::new(event.to_string(), closure);
     window()
-        .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
+        .add_event_listener_with_callback(event, guard.closure.as_ref().unchecked_ref())
         .unwrap();
-    closure.forget(); // Keep it alive
+    guard
 }
 
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
@@ -48,44 +52,49 @@ impl simple_3d_core::Interface for WasmInterface {
         (width, height)
     }
 
-    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) {
+    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) -> impl Guard {
         register_event_listener("resize", move |_: Event| {
             let (width, height) = Self::get_screen_size();
             resize_screen(width, height);
 
             on_resize(width, height);
-        });
+        })
     }
 
-    fn register_timer<C: FnMut() + 'static>(interval: i32, mut on_tick: C) {
-        register_timer(interval, on_tick);
+    fn register_timer<C: FnMut() + 'static>(interval: i32, on_tick: C) -> impl Guard {
+        register_timer(interval, on_tick)
     }
 
-    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C) {
+    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C) -> impl Guard {
         let key = key.to_owned();
         register_event_listener("keydown", move |event: KeyboardEvent| {
             if key == event.key() {
                 on_hold();
             }
-        });
+        })
     }
 
-    fn start<C: FnMut() + Send + 'static>(mut on_frame: C) {
+    fn start<C: FnMut() + Send + 'static>(mut on_frame: C) -> impl Guard {
         let (width, height) = Self::get_screen_size();
         resize_screen(width, height);
 
         let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
         let g = Rc::clone(&f);
 
+        let guard = WasmAnimationFrameGuard::default();
+        let gc = Rc::clone(&guard.0);
         *g.borrow_mut() = Some(Closure::new(move || {
             web_sys::console::log_1(&"Rendering frame".into());
 
             on_frame();
 
-            request_animation_frame(f.borrow().as_ref().unwrap());
+            if gc.get() {
+                request_animation_frame(f.borrow().as_ref().unwrap());
+            }
         }));
 
         request_animation_frame(g.borrow().as_ref().unwrap());
+        guard
     }
 
     fn draw(screen: &Screen) {
@@ -181,4 +190,50 @@ fn mk_image_data(screen: &Screen) -> web_sys::ImageData {
         height,
     )
     .unwrap()
+}
+
+struct WasmAnimationFrameGuard(Rc<std::cell::Cell<bool>>);
+impl Default for WasmAnimationFrameGuard {
+    fn default() -> Self {
+        Self(Rc::new(std::cell::Cell::new(true)))
+    }
+}
+impl Guard for WasmAnimationFrameGuard {
+    fn is_finished(&self) -> bool {
+        false
+    }
+    fn stop(self) {
+        self.0.set(false);
+    }
+}
+
+struct WasmTimerGuard(i32);
+impl Guard for WasmTimerGuard {
+    fn is_finished(&self) -> bool {
+        false
+    }
+    fn stop(self) {
+        window().clear_interval_with_handle(self.0);
+    }
+}
+
+struct WasmEventGuard {
+    event: String,
+    closure: Closure<dyn FnMut(Event)>,
+}
+impl WasmEventGuard {
+    fn new(event: String, closure: Closure<dyn FnMut(Event)>) -> Self {
+        Self { event, closure }
+    }
+}
+impl Guard for WasmEventGuard {
+    fn is_finished(&self) -> bool {
+        false
+    }
+    fn stop(self) {
+        window()
+            .remove_event_listener_with_callback(&self.event, self.closure.as_ref().unchecked_ref())
+            .unwrap();
+        self.closure.forget();
+    }
 }

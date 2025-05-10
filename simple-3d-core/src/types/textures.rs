@@ -9,8 +9,11 @@ impl Textures {
         self.0.get(name).unwrap_or(&Texture::None)
     }
 
-    pub fn init() -> Self {
-        let mut textures = HashMap::new();
+    pub fn new(images: HashMap<Box<str>, Image>) -> Self {
+        let mut textures = images
+            .into_iter()
+            .map(|(name, image)| (name, Texture::Image { image }))
+            .collect::<HashMap<Box<str>, Texture>>();
         textures.insert("none".into(), Texture::None);
         textures.insert("solid_red".into(), Texture::Solid(255, 0, 0, 255));
 

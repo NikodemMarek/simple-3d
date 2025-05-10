@@ -1,4 +1,5 @@
 pub mod camera;
+pub mod keys;
 pub mod matrix;
 pub mod mesh;
 pub mod pixel;

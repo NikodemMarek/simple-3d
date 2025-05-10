@@ -1,4 +1,9 @@
-use simple_3d_core::{load_image, load_obj};
+use std::collections::HashMap;
+
+use simple_3d_core::{
+    init, load_image, load_obj,
+    types::{mesh::Mesh, textures::Image},
+};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -34,15 +39,25 @@ pub(crate) fn context() -> CanvasRenderingContext2d {
 
 #[wasm_bindgen(start)]
 pub async fn start() -> Result<(), JsValue> {
-    let object = load_obj(&load_binary_asset("cube.obj").await);
-    let image = load_image(&load_binary_asset("crate.jpg").await);
+    let (objects, images) = load_objects(&["cube.obj"]).await;
 
-    simple_3d_core::init::<interface::WasmInterface>(
-        Box::new([object]),
-        Box::new([("crate.jpg".to_string(), image)]),
-    );
+    let app = init::<interface::WasmInterface>(objects, images);
+    app.wait();
 
     Ok(())
+}
+
+async fn load_objects(paths: &[&str]) -> (Box<[Mesh]>, HashMap<Box<str>, Image>) {
+    let mut objects = Vec::new();
+    let mut images = HashMap::new();
+    for path in paths {
+        let object = load_obj(&load_binary_asset(path).await);
+        let texture = object.texture.clone();
+        let image = load_image(&load_binary_asset(&texture).await);
+        images.insert(texture, image);
+        objects.push(object);
+    }
+    (objects.into(), images)
 }
 
 async fn load_binary_asset(name: &str) -> Box<[u8]> {

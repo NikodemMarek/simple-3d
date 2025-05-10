@@ -1,28 +1,23 @@
+use simple_3d_core::types::{keys::Key, pixel::Pixel, screen::Screen};
 use std::{cell::RefCell, rc::Rc};
-
 use wasm_bindgen::{JsCast, prelude::Closure};
-use web_sys::{Event, KeyboardEvent};
-
-use simple_3d_core::{
-    Guard,
-    types::{pixel::Pixel, screen::Screen},
-};
+use web_sys::{CanvasRenderingContext2d, Event, HtmlCanvasElement, KeyboardEvent};
 
 use crate::{canvas, context, window};
 
-fn register_timer<C: FnMut() + 'static>(interval: i32, closure: C) -> impl Guard {
+fn register_timer<C: FnMut() + 'static>(interval: i32, closure: C) {
     let closure = Closure::wrap(Box::new(closure) as Box<dyn FnMut()>);
 
-    let handle = window()
+    window()
         .set_interval_with_callback_and_timeout_and_arguments_0(
             closure.as_ref().unchecked_ref(),
             interval,
         )
         .unwrap();
-    WasmTimerGuard(handle)
+    closure.forget();
 }
 
-fn register_event_listener<E, C>(event: &str, closure: C) -> impl Guard
+fn register_event_listener<E, C>(event: &str, closure: C)
 where
     E: JsCast + 'static,
     C: Fn(E) + 'static,
@@ -31,11 +26,10 @@ where
         closure(e.dyn_into::<E>().unwrap());
     }) as Box<dyn FnMut(_)>);
 
-    let guard = WasmEventGuard::new(event.to_string(), closure);
     window()
-        .add_event_listener_with_callback(event, guard.closure.as_ref().unchecked_ref())
+        .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
         .unwrap();
-    guard
+    closure.forget();
 }
 
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
@@ -46,65 +40,74 @@ fn request_animation_frame(f: &Closure<dyn FnMut()>) {
 
 pub struct WasmInterface;
 impl simple_3d_core::Interface for WasmInterface {
+    fn start<
+        F: FnMut() -> Option<Screen> + Send + 'static,
+        R: Fn(u32, u32) + Send + 'static,
+        T: Fn() + Send + 'static,
+        K: Fn() + Send + 'static,
+    >(
+        mut on_frame: F,
+        on_resize: R,
+        timers: Vec<(u64, T)>,
+        keys: Vec<(Key, K)>,
+    ) -> Self {
+        let c = canvas();
+        let (width, height) = Self::get_screen_size();
+        resize_screen(&c, width, height);
+        on_resize(width, height);
+
+        register_event_listener("resize", move |_: Event| {
+            let (width, height) = Self::get_screen_size();
+            resize_screen(&c, width, height);
+
+            on_resize(width, height);
+        });
+
+        for (timer, on_tick) in timers {
+            register_timer(timer as i32, on_tick);
+        }
+
+        for (key, on_hold) in keys {
+            register_event_listener("keydown", move |event: KeyboardEvent| {
+                let pressed = match event.key().as_str() {
+                    "ArrowUp" => Key::ArrowUp,
+                    "ArrowDown" => Key::ArrowDown,
+                    "ArrowLeft" => Key::ArrowLeft,
+                    "ArrowRight" => Key::ArrowRight,
+                    _ => return,
+                };
+                if key == pressed {
+                    on_hold();
+                }
+            });
+        }
+
+        let c = context();
+        let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
+        let g = Rc::clone(&f);
+        *g.borrow_mut() = Some(Closure::new(move || {
+            web_sys::console::log_1(&"Rendering frame".into());
+
+            if let Some(screen) = on_frame() {
+                draw(&c, &screen);
+            } else {
+                return;
+            }
+
+            request_animation_frame(f.borrow().as_ref().unwrap());
+        }));
+
+        request_animation_frame(g.borrow().as_ref().unwrap());
+
+        WasmInterface
+    }
+
     fn get_screen_size() -> (u32, u32) {
         let width = window().inner_width().unwrap().as_f64().unwrap() as u32;
         let height = window().inner_height().unwrap().as_f64().unwrap() as u32;
         (width, height)
     }
-
-    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) -> impl Guard {
-        register_event_listener("resize", move |_: Event| {
-            let (width, height) = Self::get_screen_size();
-            resize_screen(width, height);
-
-            on_resize(width, height);
-        })
-    }
-
-    fn register_timer<C: FnMut() + 'static>(interval: i32, on_tick: C) -> impl Guard {
-        register_timer(interval, on_tick)
-    }
-
-    fn handle_key_hold<C: Fn() + 'static>(key: &str, on_hold: C) -> impl Guard {
-        let key = key.to_owned();
-        register_event_listener("keydown", move |event: KeyboardEvent| {
-            if key == event.key() {
-                on_hold();
-            }
-        })
-    }
-
-    fn start<C: FnMut() + Send + 'static>(mut on_frame: C) -> impl Guard {
-        let (width, height) = Self::get_screen_size();
-        resize_screen(width, height);
-
-        let f: Rc<RefCell<_>> = Rc::new(RefCell::new(None));
-        let g = Rc::clone(&f);
-
-        let guard = WasmAnimationFrameGuard::default();
-        let gc = Rc::clone(&guard.0);
-        *g.borrow_mut() = Some(Closure::new(move || {
-            web_sys::console::log_1(&"Rendering frame".into());
-
-            on_frame();
-
-            if gc.get() {
-                request_animation_frame(f.borrow().as_ref().unwrap());
-            }
-        }));
-
-        request_animation_frame(g.borrow().as_ref().unwrap());
-        guard
-    }
-
-    fn draw(screen: &Screen) {
-        let context = context();
-        let (width, height) = screen.size();
-        context.clear_rect(0.0, 0.0, width as f64, height as f64);
-
-        let image_data = mk_image_data(screen);
-        context.put_image_data(&image_data, 0.0, 0.0).unwrap();
-    }
+    fn wait(self) {}
 
     // {
     //     let is_held = Rc::new(Cell::new(false));
@@ -169,12 +172,17 @@ impl simple_3d_core::Interface for WasmInterface {
     // }
 }
 
-fn resize_screen(width: u32, height: u32) -> Screen {
-    let canvas = canvas();
+fn draw(context: &CanvasRenderingContext2d, screen: &Screen) {
+    let (width, height) = screen.size();
+    context.clear_rect(0.0, 0.0, width as f64, height as f64);
+
+    let image_data = mk_image_data(screen);
+    context.put_image_data(&image_data, 0.0, 0.0).unwrap();
+}
+
+fn resize_screen(canvas: &HtmlCanvasElement, width: u32, height: u32) {
     canvas.set_width(width);
     canvas.set_height(height);
-
-    Screen::new(width, height)
 }
 
 fn mk_image_data(screen: &Screen) -> web_sys::ImageData {
@@ -190,50 +198,4 @@ fn mk_image_data(screen: &Screen) -> web_sys::ImageData {
         height,
     )
     .unwrap()
-}
-
-struct WasmAnimationFrameGuard(Rc<std::cell::Cell<bool>>);
-impl Default for WasmAnimationFrameGuard {
-    fn default() -> Self {
-        Self(Rc::new(std::cell::Cell::new(true)))
-    }
-}
-impl Guard for WasmAnimationFrameGuard {
-    fn is_finished(&self) -> bool {
-        false
-    }
-    fn stop(self) {
-        self.0.set(false);
-    }
-}
-
-struct WasmTimerGuard(i32);
-impl Guard for WasmTimerGuard {
-    fn is_finished(&self) -> bool {
-        false
-    }
-    fn stop(self) {
-        window().clear_interval_with_handle(self.0);
-    }
-}
-
-struct WasmEventGuard {
-    event: String,
-    closure: Closure<dyn FnMut(Event)>,
-}
-impl WasmEventGuard {
-    fn new(event: String, closure: Closure<dyn FnMut(Event)>) -> Self {
-        Self { event, closure }
-    }
-}
-impl Guard for WasmEventGuard {
-    fn is_finished(&self) -> bool {
-        false
-    }
-    fn stop(self) {
-        window()
-            .remove_event_listener_with_callback(&self.event, self.closure.as_ref().unchecked_ref())
-            .unwrap();
-        self.closure.forget();
-    }
 }

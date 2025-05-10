@@ -1,64 +1,92 @@
-use std::io::{Read, Write};
-use std::thread::JoinHandle;
-use std::{io::stdout, thread};
-
-use simple_3d_core::{
-    Guard,
-    types::{pixel::Pixel, screen::Screen},
+use simple_3d_core::types::{keys::Key, pixel::Pixel, screen::Screen};
+use std::{
+    io::{Read, Write, stdout},
+    thread,
 };
-use termion::screen::IntoAlternateScreen;
+use termion::{async_stdin, raw::IntoRawMode};
 
 const BRIGHTNESS_PIXELS: [char; 10] = ['@', '%', '#', '*', '+', '=', '-', ':', '.', ' '];
+const FPS: u64 = 60;
 
 pub struct CliInterface;
 impl simple_3d_core::Interface for CliInterface {
+    fn start<
+        F: FnMut() -> Option<Screen> + Send + 'static,
+        R: Fn(u32, u32) + Send + 'static,
+        T: Fn() + Send + 'static,
+        K: Fn() + Send + 'static,
+    >(
+        mut on_frame: F,
+        on_resize: R,
+        timers: Vec<(u64, T)>,
+        keys: Vec<(Key, K)>,
+    ) -> Self {
+        let stdout = stdout();
+        let mut stdout = stdout.into_raw_mode().unwrap();
+        let mut stdin = async_stdin().bytes();
+
+        let interval = 1000 / FPS;
+        let mut time_passed = 0;
+        thread::spawn(move || {
+            loop {
+                let (width, height) = Self::get_screen_size();
+                on_resize(width, height);
+
+                thread::sleep(std::time::Duration::from_millis(interval));
+                time_passed += interval;
+
+                for (timer, on_tick) in timers.iter() {
+                    if time_passed % timer == 0 {
+                        on_tick();
+                    }
+                }
+
+                let pressed = match stdin.next() {
+                    Some(Ok(b'j')) => Some(Key::ArrowDown),
+                    Some(Ok(b'k')) => Some(Key::ArrowUp),
+                    Some(Ok(b'h')) => Some(Key::ArrowLeft),
+                    Some(Ok(b'l')) => Some(Key::ArrowRight),
+                    _ => None,
+                };
+                if let Some(pressed) = pressed {
+                    for (key, on_key) in keys.iter() {
+                        if pressed == *key {
+                            on_key();
+                        }
+                    }
+                }
+
+                if let Some(screen) = on_frame() {
+                    draw(&mut stdout, &screen);
+                } else {
+                    return;
+                }
+            }
+        });
+
+        CliInterface
+    }
+
     fn get_screen_size() -> (u32, u32) {
         let (width, height) = termion::terminal_size().unwrap();
         (width as u32, height as u32)
     }
-
-    fn handle_resize<C: Fn(u32, u32) + 'static>(on_resize: C) -> impl Guard {
-        let (width, height) = Self::get_screen_size();
-        on_resize(width, height);
-        CliEmptyGuard
-    }
-
-    fn register_timer<C: FnMut() + Send + 'static>(interval: i32, mut on_tick: C) -> impl Guard {
-        let handle = thread::spawn(move || {
-            loop {
-                thread::sleep(std::time::Duration::from_millis(interval as u64));
-                on_tick();
+    fn wait(self) {
+        let mut stdin = async_stdin().bytes();
+        loop {
+            if let Some(Ok(b'q')) = stdin.next() {
+                break;
             }
-        });
-        CliThreadGuard(handle)
+        }
     }
+}
 
-    fn handle_key_hold<C: Fn() + Send + 'static>(key: &str, on_hold: C) -> impl Guard {
-        let mut input = termion::async_stdin();
-        let key = key.to_string();
-        let handle = thread::spawn(move || {
-            let mut buffer = [0; 1];
-            loop {
-                if input.read_exact(&mut buffer).is_ok() && buffer[0] == key.as_bytes()[0] {
-                    on_hold();
-                }
-            }
-        });
-        CliThreadGuard(handle)
-    }
-
-    fn start<C: FnMut() + Send + 'static>(on_frame: C) -> impl Guard {
-        Self::register_timer(20, on_frame)
-    }
-
-    fn draw(screen: &Screen) {
-        let mut out = stdout().into_alternate_screen().unwrap();
-        // write!(out, "{}", termion::clear::All).unwrap();
-        let pixels = screen.buffer().iter().map(map_pixel).collect::<String>();
-        write!(out, "{}", termion::cursor::Hide).unwrap();
-        write!(out, "{}", pixels).unwrap();
-        out.flush().unwrap();
-    }
+fn draw(out: &mut impl Write, screen: &Screen) {
+    let pixels = screen.buffer().iter().map(map_pixel).collect::<String>();
+    write!(out, "{}", termion::clear::All).unwrap();
+    write!(out, "{}", termion::cursor::Hide).unwrap();
+    write!(out, "{}", pixels).unwrap();
+    out.flush().unwrap();
 }
 
 fn map_pixel(pixel: &Pixel) -> String {
@@ -81,22 +109,4 @@ fn map_pixel(pixel: &Pixel) -> String {
         color::Fg(color::Rgb(pixel.0, pixel.1, pixel.2)),
         value
     )
-}
-
-pub struct CliThreadGuard(JoinHandle<u8>);
-impl Guard for CliThreadGuard {
-    fn is_finished(&self) -> bool {
-        self.0.is_finished()
-    }
-    fn stop(self) {
-        self.0.thread().unpark();
-    }
-}
-
-pub struct CliEmptyGuard;
-impl Guard for CliEmptyGuard {
-    fn is_finished(&self) -> bool {
-        false
-    }
-    fn stop(self) {}
 }

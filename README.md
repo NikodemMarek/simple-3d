@@ -2,8 +2,8 @@
 
 A flexible 3D rasterizer with multiple output interfaces. Currently supports WebAssembly (rendering to canvas) and command-line output.
 
-![WASM Demo](demo/wasm.mkv) | ![CLI Demo](demo/cli.mkv)
----------------------------|--------------------------
+![WASM Demo](demo/wasm.gif) | ![CLI Demo](demo/cli.gif)
+----------------------------|--------------------------
 
 ## Features
 

@@ -7,11 +7,28 @@ use crate::types::{
 
 pub fn load_obj(data: &[u8]) -> Mesh {
     #[inline]
-    fn vec_n<const S: usize>(reminder: std::str::Split<&str>) -> Vector<S> {
+    fn vec_n<const S: usize>(reminder: std::str::SplitAsciiWhitespace) -> Vector<S> {
         reminder
             .take(S)
             .map(|s| s.parse::<f64>().unwrap())
             .collect()
+    }
+    #[inline]
+    fn faces(reminder: std::str::SplitAsciiWhitespace) -> [(usize, usize); 3] {
+        let parts = reminder
+            .map(|t| {
+                let parts = t
+                    .split("/")
+                    .map(|s| s.parse::<usize>().unwrap() - 1)
+                    .collect::<Vec<_>>();
+                if parts.len() == 1 {
+                    (parts[0], 0)
+                } else {
+                    (parts[0], parts[1])
+                }
+            })
+            .collect::<Vec<(usize, usize)>>();
+        [parts[0], parts[1], parts[2]]
     }
 
     let file = String::from_utf8_lossy(data);
@@ -22,24 +39,13 @@ pub fn load_obj(data: &[u8]) -> Mesh {
     let mut texture = "none";
 
     for line in file.lines() {
-        let mut parts = line.split(" ");
+        let mut parts = line.split_ascii_whitespace();
         match parts.next() {
             Some("v") => vertices.push(vec_n::<3>(parts)),
             Some("vt") => uvs.push(vec_n::<2>(parts)),
             Some("f") => {
-                let indexes = parts
-                    .take(3)
-                    .flat_map(|t| {
-                        t.split("/")
-                            .take(3)
-                            .map(|s| s.parse::<usize>().unwrap() - 1)
-                    })
-                    .collect::<Vec<_>>();
-                indices.push((
-                    (indexes[0], indexes[1]),
-                    (indexes[3], indexes[4]),
-                    (indexes[6], indexes[7]),
-                ));
+                let indexes = faces(parts);
+                indices.push((indexes[0], indexes[1], indexes[2]));
             }
             Some("usemtl") => {
                 texture = parts.next().unwrap();

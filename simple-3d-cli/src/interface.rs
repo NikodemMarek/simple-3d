@@ -6,7 +6,6 @@ use std::{
 use termion::{async_stdin, raw::IntoRawMode};
 
 const BRIGHTNESS_PIXELS: [char; 10] = ['@', '%', '#', '*', '+', '=', '-', ':', '.', ' '];
-const FPS: u64 = 60;
 
 pub struct CliInterface;
 impl simple_3d_core::Interface for CliInterface {
@@ -25,18 +24,18 @@ impl simple_3d_core::Interface for CliInterface {
         let mut stdout = stdout.into_raw_mode().unwrap();
         let mut stdin = async_stdin().bytes();
 
-        let interval = 1000 / FPS;
+        let frame_duration = 10;
         let mut time_passed = 0;
         thread::spawn(move || {
             loop {
                 let (width, height) = Self::get_screen_size();
                 on_resize(width, height);
 
-                thread::sleep(std::time::Duration::from_millis(interval));
-                time_passed += interval;
+                thread::sleep(std::time::Duration::from_millis(frame_duration));
+                time_passed += frame_duration;
 
-                for (timer, on_tick) in timers.iter() {
-                    if time_passed % timer == 0 {
+                for (interval, on_tick) in timers.iter() {
+                    if time_passed % interval == 0 {
                         on_tick();
                     }
                 }
@@ -83,9 +82,15 @@ impl simple_3d_core::Interface for CliInterface {
 
 fn draw(out: &mut impl Write, screen: &Screen) {
     let pixels = screen.buffer().iter().map(map_pixel).collect::<String>();
-    write!(out, "{}", termion::clear::All).unwrap();
-    write!(out, "{}", termion::cursor::Hide).unwrap();
-    write!(out, "{}", pixels).unwrap();
+    write!(
+        out,
+        "{}{}{}{}",
+        termion::cursor::Hide,
+        termion::cursor::Goto(1, 1),
+        pixels,
+        termion::cursor::Goto(1, 1)
+    )
+    .unwrap();
     out.flush().unwrap();
 }
 

@@ -66,7 +66,7 @@ pub fn init<'a, I: Interface + 'a>(
     objects: Box<[Mesh]>,
     images: HashMap<Box<str>, Image>,
 ) -> App<I> {
-    let timers = [(50, Action::RotateObject(0, (0.01, 0.02, 0.03).into()))];
+    let timers = [(10, Action::RotateObject(0, (0.01, 0.02, 0.03).into()))];
     let keys = [
         (Key::ArrowUp, Action::MoveCamera((0.0, 0.1, 0.0).into())),
         (Key::ArrowDown, Action::MoveCamera((0.0, -0.1, 0.0).into())),
